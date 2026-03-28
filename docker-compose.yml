@@ -17,6 +17,8 @@ services:
     volumes:
       - routerai-data:/app/data
       - routerai-config:/app/config
+    env_file:
+      - .env
     environment:
       - PYTHONIOENCODING=utf-8
       - PYTHONUNBUFFERED=1
@@ -26,7 +28,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    networks:
+      - routerai-net
 
   dashboard:
     build:
@@ -39,7 +43,8 @@ services:
     volumes:
       - routerai-data:/app/data:ro
       - routerai-config:/app/config
-      - ./web:/app/web:ro
+    env_file:
+      - .env
     environment:
       - PYTHONIOENCODING=utf-8
       - PYTHONUNBUFFERED=1
@@ -48,7 +53,15 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
+    networks:
+      - routerai-net
+
+networks:
+  routerai-net:
+    driver: bridge
 
 volumes:
   routerai-data:
+    name: routerai-data
   routerai-config:
+    name: routerai-config
