@@ -3,183 +3,342 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔀 RouterAI — แผงควบคุม</title>
+<title>🔀 RouterAI — แผงควบคุม AI สำหรับคนไทย</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0f0f23;
-  --bg2: #1a1a2e;
-  --bg3: #16213e;
-  --accent: #00d4ff;
-  --accent2: #7c3aed;
-  --green: #22c55e;
+  --bg: #0a0a1a;
+  --bg2: #111127;
+  --bg3: #1a1a3e;
+  --bg4: #222255;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --accent-glow: rgba(99,102,241,0.15);
+  --green: #10b981;
+  --green-glow: rgba(16,185,129,0.15);
   --red: #ef4444;
-  --yellow: #eab308;
+  --red-glow: rgba(239,68,68,0.1);
+  --yellow: #f59e0b;
+  --yellow-glow: rgba(245,158,11,0.1);
   --orange: #f97316;
-  --text: #e2e8f0;
-  --text2: #94a3b8;
-  --border: #334155;
-  --radius: 12px;
+  --cyan: #06b6d4;
+  --pink: #ec4899;
+  --text: #e8eafc;
+  --text2: #8b8fad;
+  --text3: #5b5f80;
+  --border: #1e2148;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --glass: rgba(255,255,255,0.03);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  font-family: 'Noto Sans Thai', 'Sarabun', -apple-system, sans-serif;
+  font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  overflow-x: hidden;
 }
+
+/* ── Animated BG ── */
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(236,72,153,0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 50% 80%, rgba(6,182,212,0.05) 0%, transparent 50%);
+  animation: bgShift 20s ease-in-out infinite alternate;
+  z-index: 0;
+  pointer-events: none;
+}
+@keyframes bgShift { 0% { transform: rotate(0deg); } 100% { transform: rotate(5deg); } }
 
 /* ── Sidebar ── */
 .sidebar {
   position: fixed; left: 0; top: 0; bottom: 0;
-  width: 260px;
+  width: 280px;
   background: var(--bg2);
   border-right: 1px solid var(--border);
-  padding: 20px 0;
   z-index: 100;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(20px);
+}
+.sidebar-header {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
 }
 .sidebar-logo {
-  text-align: center;
-  padding: 0 20px 20px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sidebar-logo .logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.3);
 }
 .sidebar-logo h1 {
-  font-size: 1.5rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  font-size: 1.35rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #fff, var(--accent-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.sidebar-logo p {
-  font-size: 0.75rem;
+.sidebar-logo .tagline {
+  font-size: 0.7rem;
   color: var(--text2);
-  margin-top: 4px;
+  margin-top: 2px;
+}
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 0;
+  overflow-y: auto;
+}
+.nav-section {
+  padding: 8px 20px 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text3);
 }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 14px;
+  padding: 11px 20px;
   color: var(--text2);
-  text-decoration: none;
-  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
   border-left: 3px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 400;
+  text-decoration: none;
 }
-.nav-item:hover, .nav-item.active {
-  background: var(--bg3);
-  color: var(--accent);
+.nav-item:hover {
+  background: var(--glass);
+  color: var(--text);
+}
+.nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent-light);
   border-left-color: var(--accent);
+  font-weight: 600;
 }
-.nav-item .icon { font-size: 1.2rem; width: 28px; text-align: center; }
-.nav-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 12px 20px;
+.nav-icon {
+  width: 24px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+.nav-badge {
+  margin-left: auto;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text3);
+  text-align: center;
+}
+.sidebar-footer a {
+  color: var(--accent-light);
+  text-decoration: none;
 }
 
 /* ── Main ── */
 .main {
-  margin-left: 260px;
-  padding: 24px;
+  margin-left: 280px;
+  padding: 28px 32px;
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
-.page { display: none; }
+.page { display: none; animation: fadeIn 0.3s ease; }
 .page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.page-header {
+  margin-bottom: 28px;
+}
 .page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 20px;
+  font-size: 1.75rem;
+  font-weight: 800;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+}
+.page-subtitle {
+  color: var(--text2);
+  font-size: 0.9rem;
+  margin-top: 4px;
 }
 
-/* ── Cards ── */
-.grid { display: grid; gap: 16px; }
-.grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-
-.card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  transition: border-color 0.2s;
+/* ── Stats Row ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
 }
-.card:hover { border-color: var(--accent); }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.card-title { font-size: 1rem; font-weight: 600; }
-.card-subtitle { font-size: 0.8rem; color: var(--text2); }
-
-/* ── Stats ── */
 .stat-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  text-align: center;
-}
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.stat-label { font-size: 0.85rem; color: var(--text2); margin-top: 4px; }
-
-/* ── Provider Cards ── */
-.provider-card {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
   position: relative;
   overflow: hidden;
+  transition: all 0.3s;
 }
-.provider-card.available { border-color: var(--green); }
-.provider-card.unavailable { opacity: 0.6; }
-.provider-card .status-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 6px;
+.stat-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
 }
-.provider-card .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
-.provider-card .status-dot.off { background: var(--red); }
-.provider-card .status-dot.warn { background: var(--yellow); }
-.provider-name {
-  font-size: 1.1rem;
-  font-weight: 600;
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.stat-card.purple::before { background: linear-gradient(90deg, var(--accent), var(--pink)); }
+.stat-card.green::before { background: linear-gradient(90deg, var(--green), var(--cyan)); }
+.stat-card.orange::before { background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+.stat-card.blue::before { background: linear-gradient(90deg, var(--cyan), var(--accent)); }
+.stat-icon { font-size: 1.8rem; margin-bottom: 8px; }
+.stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.stat-value.purple { color: var(--accent-light); }
+.stat-value.green { color: var(--green); }
+.stat-value.orange { color: var(--orange); }
+.stat-value.blue { color: var(--cyan); }
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+/* ── Provider Grid ── */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.provider-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: all 0.3s;
+  position: relative;
+}
+.provider-card:hover {
+  border-color: rgba(99,102,241,0.4);
+  box-shadow: var(--shadow);
+}
+.provider-card.has-key {
+  border-color: rgba(16,185,129,0.3);
+}
+.provider-card.has-key:hover {
+  border-color: rgba(16,185,129,0.6);
+  box-shadow: 0 4px 24px rgba(16,185,129,0.1);
+}
+.provider-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.provider-models {
-  margin-top: 12px;
+.provider-flag {
+  font-size: 1.5rem;
+}
+.provider-info { flex: 1; }
+.provider-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.provider-desc {
+  font-size: 0.75rem;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.provider-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.provider-status.active {
+  background: var(--green-glow);
+  color: var(--green);
+}
+.provider-status.inactive {
+  background: var(--red-glow);
+  color: var(--red);
+}
+.provider-status.nokey {
+  background: var(--yellow-glow);
+  color: var(--yellow);
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.status-dot.off { background: var(--red); }
+.status-dot.wait { background: var(--yellow); }
+
+/* Model tags */
+.models-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-bottom: 14px;
 }
 .model-tag {
   background: var(--bg3);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 4px 10px;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text2);
+  transition: all 0.2s;
+  cursor: default;
 }
-.model-tag.free { border-color: var(--green); color: var(--green); }
-.provider-actions {
-  margin-top: 16px;
+.model-tag:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.model-tag.free {
+  border-color: rgba(16,185,129,0.3);
+  color: var(--green);
+}
+.model-tag.free::after { content: ' 🆓'; font-size: 0.6rem; }
+
+/* Actions row */
+.actions-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -192,291 +351,504 @@ body {
   gap: 6px;
   padding: 8px 16px;
   border: none;
-  border-radius: 8px;
-  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
   font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   text-decoration: none;
+  white-space: nowrap;
 }
+.btn:active { transform: scale(0.97); }
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(99,102,241,0.3);
+}
+.btn-primary:hover { box-shadow: 0 4px 20px rgba(99,102,241,0.5); transform: translateY(-1px); }
+.btn-success {
+  background: linear-gradient(135deg, var(--green), #059669);
   color: #fff;
 }
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-.btn-secondary {
+.btn-success:hover { box-shadow: 0 4px 16px rgba(16,185,129,0.4); }
+.btn-ghost {
   background: var(--bg3);
   color: var(--text);
   border: 1px solid var(--border);
 }
-.btn-secondary:hover { border-color: var(--accent); }
-.btn-success { background: var(--green); color: #fff; }
-.btn-danger { background: var(--red); color: #fff; }
-.btn-sm { padding: 5px 10px; font-size: 0.78rem; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost:hover { border-color: var(--accent); }
+.btn-danger {
+  background: rgba(239,68,68,0.15);
+  color: var(--red);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-sm { padding: 5px 10px; font-size: 0.75rem; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Cards ── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+.card + .card { margin-top: 16px; }
 
 /* ── Forms ── */
-.form-group { margin-bottom: 16px; }
+.form-group { margin-bottom: 18px; }
 .form-label {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 500;
   color: var(--text2);
   margin-bottom: 6px;
 }
 .form-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   background: var(--bg3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font-family: inherit;
   font-size: 0.9rem;
+  transition: border-color 0.2s;
 }
-.form-input:focus { outline: none; border-color: var(--accent); }
-.form-input::placeholder { color: var(--text2); }
+.form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.form-input::placeholder { color: var(--text3); }
 select.form-input { cursor: pointer; }
-
-/* ── Table ── */
-.table-wrap { overflow-x: auto; }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
+.form-hint {
+  font-size: 0.72rem;
+  color: var(--text3);
+  margin-top: 4px;
 }
-th, td {
-  padding: 10px 14px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
+.form-row {
+  display: flex;
+  gap: 16px;
 }
-th { color: var(--text2); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; }
-tr:hover td { background: var(--bg3); }
+.form-row > .form-group { flex: 1; }
 
 /* ── Code Block ── */
 .code-block {
   background: #0d1117;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: var(--radius-sm);
+  padding: 18px;
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 0.82rem;
-  line-height: 1.6;
+  line-height: 1.7;
   overflow-x: auto;
   white-space: pre;
   color: #c9d1d9;
+  position: relative;
 }
+.code-block .comment { color: #6a737d; }
+.code-block .cmd { color: #79c0ff; }
+.code-block .ok { color: #7ee787; }
+.code-block .key { color: #d2a8ff; }
 
 /* ── Badge ── */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.7rem;
   font-weight: 600;
+  gap: 4px;
 }
-.badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
-.badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
-.badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
-.badge-blue { background: rgba(0,212,255,0.15); color: var(--accent); }
+.badge-green { background: var(--green-glow); color: var(--green); }
+.badge-red { background: var(--red-glow); color: var(--red); }
+.badge-yellow { background: var(--yellow-glow); color: var(--yellow); }
+.badge-purple { background: var(--accent-glow); color: var(--accent-light); }
 
 /* ── Toast ── */
 .toast-container {
-  position: fixed;
-  top: 20px; right: 20px;
+  position: fixed; top: 20px; right: 20px;
   z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: flex; flex-direction: column; gap: 8px;
 }
 .toast {
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  padding: 14px 22px;
   font-size: 0.85rem;
-  animation: slideIn 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  animation: toastIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  min-width: 280px;
 }
 .toast.success { border-color: var(--green); }
 .toast.error { border-color: var(--red); }
-@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } }
+.toast.info { border-color: var(--accent); }
+@keyframes toastIn { from { transform: translateX(120px) scale(0.9); opacity: 0; } to { transform: translateX(0) scale(1); opacity: 1; } }
 
-/* ── Modal ── */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 1000;
+/* ── Steps ── */
+.steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+}
+.step {
+  flex: 1;
+  text-align: center;
+  padding: 16px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  position: relative;
+}
+.step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.step.active { background: var(--accent-glow); border-color: var(--accent); }
+.step.done { background: var(--green-glow); border-color: var(--green); }
+.step-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--border);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
-.modal-overlay.show { display: flex; }
-.modal {
-  background: var(--bg2);
+.step.active .step-num { background: var(--accent); color: #fff; }
+.step.done .step-num { background: var(--green); color: #fff; }
+.step-title { font-size: 0.85rem; font-weight: 600; }
+.step-desc { font-size: 0.72rem; color: var(--text2); margin-top: 2px; }
+
+/* ── Welcome Banner ── */
+.welcome-banner {
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 24px;
-  max-width: 600px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
+  padding: 32px;
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
 }
-.modal-title {
-  font-size: 1.2rem;
-  font-weight: 600;
+.welcome-banner::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%);
+  pointer-events: none;
+}
+.welcome-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.welcome-text {
+  color: var(--text2);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 600px;
+}
+.welcome-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+/* ── Quick Setup Card ── */
+.quick-setup {
+  background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(236,72,153,0.05));
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.quick-setup-title {
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* ── Provider Selector (OpenClaw) ── */
+.provider-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
   margin-bottom: 16px;
+}
+.provider-chip {
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.provider-chip:hover { border-color: var(--accent); }
+.provider-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+.provider-chip .chip-flag { font-size: 1.3rem; }
+.provider-chip .chip-name { font-size: 0.82rem; font-weight: 600; margin-top: 4px; }
+.provider-chip .chip-speed { font-size: 0.7rem; color: var(--text2); }
+
+/* ── Health Items ── */
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.health-item:last-child { border-bottom: none; }
+.health-icon { font-size: 1.4rem; width: 36px; text-align: center; }
+.health-name { font-weight: 600; flex: 1; }
+.health-status {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* ── Key Input Row ── */
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.key-row:last-child { border-bottom: none; }
+.key-provider {
+  width: 180px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.modal-close {
-  position: absolute;
-  top: 12px; right: 16px;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-size: 1.5rem;
-  cursor: pointer;
+.key-provider .kp-flag { font-size: 1.2rem; }
+.key-provider .kp-name { font-size: 0.85rem; font-weight: 600; }
+.key-input-wrap {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+.key-input-wrap input { flex: 1; }
+.key-models {
+  font-size: 0.7rem;
+  color: var(--text3);
+  margin-top: 2px;
 }
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
-  .sidebar { width: 60px; }
-  .sidebar .nav-text, .sidebar-logo h1, .sidebar-logo p { display: none; }
+@media (max-width: 900px) {
+  .sidebar { width: 64px; }
+  .sidebar .nav-text, .sidebar .nav-badge,
+  .sidebar .tagline, .sidebar .nav-section,
+  .sidebar-logo h1, .sidebar-footer { display: none; }
+  .sidebar-logo .logo-icon { margin: 0 auto; }
+  .sidebar-header { padding: 16px 10px; text-align: center; }
   .nav-item { justify-content: center; padding: 12px; }
-  .main { margin-left: 60px; padding: 16px; }
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .nav-icon { width: auto; }
+  .main { margin-left: 64px; padding: 16px; }
+  .provider-grid { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .form-row { flex-direction: column; gap: 0; }
+  .steps { flex-direction: column; }
+  .step:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+  .step:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+}
+@media (max-width: 480px) {
+  .stats-row { grid-template-columns: 1fr; }
+  .provider-selector { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ── Progress Bar ── */
-.progress-bar {
-  height: 6px;
-  background: var(--bg3);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-.progress-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
-/* ── Tab ── */
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+/* ── Pulse dot ── */
+.pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  position: relative;
 }
-.tab {
-  padding: 10px 20px;
-  cursor: pointer;
-  color: var(--text2);
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-  font-size: 0.9rem;
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  animation: pulse 2s ease-out infinite;
 }
-.tab:hover, .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+@keyframes pulse { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.8); } }
 </style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
 <!-- Sidebar -->
 <nav class="sidebar">
-  <div class="sidebar-logo">
-    <h1>🔀 RouterAI</h1>
-    <p>รวม AI ฟรี สำหรับ OpenClaw</p>
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🔀</div>
+      <div>
+        <h1>RouterAI</h1>
+        <div class="tagline">รวม AI ฟรี สำหรับคนไทย</div>
+      </div>
+    </div>
   </div>
-  <a class="nav-item active" data-page="dashboard">
-    <span class="icon">📊</span>
-    <span class="nav-text">แดชบอร์ด</span>
-  </a>
-  <a class="nav-item" data-page="providers">
-    <span class="icon">🔌</span>
-    <span class="nav-text">ผู้ให้บริการ</span>
-  </a>
-  <a class="nav-item" data-page="keys">
-    <span class="icon">🔑</span>
-    <span class="nav-text">จัดการ API Key</span>
-  </a>
-  <div class="nav-divider"></div>
-  <a class="nav-item" data-page="openclaw">
-    <span class="icon">🤖</span>
-    <span class="nav-text">เชื่อม OpenClaw</span>
-  </a>
-  <a class="nav-item" data-page="config">
-    <span class="icon">⚙️</span>
-    <span class="nav-text">ตั้งค่า</span>
-  </a>
-  <div class="nav-divider"></div>
-  <a class="nav-item" data-page="install">
-    <span class="icon">📦</span>
-    <span class="nav-text">คู่มือติดตั้ง</span>
-  </a>
-  <a class="nav-item" data-page="health">
-    <span class="icon">🩺</span>
-    <span class="nav-text">ตรวจสอบระบบ</span>
-  </a>
+  <div class="sidebar-nav">
+    <div class="nav-section">หลัก</div>
+    <a class="nav-item active" data-page="dashboard">
+      <span class="nav-icon">📊</span><span class="nav-text">แดชบอร์ด</span>
+    </a>
+    <a class="nav-item" data-page="providers">
+      <span class="nav-icon">🔌</span><span class="nav-text">ผู้ให้บริการ</span>
+      <span class="nav-badge" id="badge-providers">0</span>
+    </a>
+    <a class="nav-item" data-page="keys">
+      <span class="nav-icon">🔑</span><span class="nav-text">จัดการ API Key</span>
+    </a>
+    <div class="nav-section">เชื่อมต่อ</div>
+    <a class="nav-item" data-page="openclaw">
+      <span class="nav-icon">🤖</span><span class="nav-text">เชื่อม OpenClaw</span>
+    </a>
+    <a class="nav-item" data-page="models">
+      <span class="nav-icon">🧠</span><span class="nav-text">เลือกโมเดล</span>
+    </a>
+    <div class="nav-section">ระบบ</div>
+    <a class="nav-item" data-page="config">
+      <span class="nav-icon">⚙️</span><span class="nav-text">ตั้งค่า</span>
+    </a>
+    <a class="nav-item" data-page="health">
+      <span class="nav-icon">🩺</span><span class="nav-text">ตรวจสอบระบบ</span>
+    </a>
+    <a class="nav-item" data-page="install">
+      <span class="nav-icon">📦</span><span class="nav-text">คู่มือติดตั้ง</span>
+    </a>
+  </div>
+  <div class="sidebar-footer">
+    สร้างด้วย ❤️ เพื่อคนไทย<br>
+    <a href="https://github.com/tenotony/RouterAI" target="_blank">GitHub</a> ·
+    <a href="https://www.facebook.com/groups/1248346110734837" target="_blank">กลุ่ม Facebook</a>
+  </div>
 </nav>
 
-<!-- Main Content -->
+<!-- Main -->
 <div class="main">
 
-  <!-- Page: Dashboard -->
+  <!-- ═══ Page: Dashboard ═══ -->
   <div class="page active" id="page-dashboard">
-    <div class="page-title">📊 แดชบอร์ด</div>
-    <div class="grid grid-4" id="stats-grid"></div>
-    <h3 style="margin:24px 0 12px;font-size:1.1rem;">🔌 สถานะผู้ให้บริการ</h3>
-    <div class="grid grid-3" id="providers-overview"></div>
-  </div>
-
-  <!-- Page: Providers -->
-  <div class="page" id="page-providers">
-    <div class="page-title">🔌 ผู้ให้บริการทั้งหมด</div>
-    <div class="grid grid-2" id="providers-full"></div>
-  </div>
-
-  <!-- Page: API Keys -->
-  <div class="page" id="page-keys">
-    <div class="page-title">🔑 จัดการ API Key</div>
-    <div class="card">
-      <p style="color:var(--text2);margin-bottom:16px;">
-        ใส่ API Key อย่างน้อย 1 ตัวเพื่อเริ่มใช้งาน แนะนำเริ่มจาก <strong style="color:var(--green);">Groq</strong> (ฟรี + เร็วที่สุด)
-      </p>
-      <div id="keys-form"></div>
-      <button class="btn btn-primary" onclick="saveKeys()" style="margin-top:16px;">💾 บันทึก API Key</button>
-    </div>
-  </div>
-
-  <!-- Page: OpenClaw -->
-  <div class="page" id="page-openclaw">
-    <div class="page-title">🤖 เชื่อมต่อกับ OpenClaw</div>
-    <div class="card" style="margin-bottom:16px;">
-      <h3 style="margin-bottom:12px;">ขั้นตอนง่ายๆ 3 ขั้นตอน:</h3>
-      <ol style="color:var(--text2);line-height:2;padding-left:20px;">
-        <li>ใส่ API Key อย่างน้อย 1 ตัว (หน้า <strong style="color:var(--accent);">จัดการ API Key</strong>)</li>
-        <li>เลือกผู้ให้บริการและโมเดลด้านล่าง</li>
-        <li>คัดลอก config ไปวางใน OpenClaw แล้วรีสตาร์ท</li>
-      </ol>
+    <div class="page-header">
+      <div class="page-title">📊 แดชบอร์ด</div>
+      <div class="page-subtitle">ภาพรวมสถานะระบบ RouterAI ของคุณ</div>
     </div>
 
-    <div class="card">
-      <h3 style="margin-bottom:16px;">เลือกผู้ให้บริการและโมเดล</h3>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-        <div class="form-group" style="flex:1;min-width:200px;">
-          <label class="form-label">ผู้ให้บริการ</label>
-          <select class="form-input" id="oc-provider" onchange="updateOcModels()"></select>
+    <!-- Stats -->
+    <div class="stats-row" id="stats-grid"></div>
+
+    <!-- Welcome (show when no keys) -->
+    <div class="welcome-banner" id="welcome-banner" style="display:none;">
+      <div class="welcome-title">👋 ยินดีต้อนรับสู่ RouterAI!</div>
+      <div class="welcome-text">
+        คุณยังไม่ได้ใส่ API Key เลย — เริ่มต้นง่ายๆ แค่สมัคร <strong>Groq</strong> (ฟรี + เร็วที่สุด)
+        แล้วใส่ Key ในหน้า "จัดการ API Key" ได้เลย
+      </div>
+      <div class="welcome-actions">
+        <button class="btn btn-primary" onclick="navTo('keys')">🔑 ใส่ API Key</button>
+        <a href="https://console.groq.com/keys" target="_blank" class="btn btn-ghost">🔗 สมัคร Groq ฟรี</a>
+      </div>
+    </div>
+
+    <!-- Quick Setup -->
+    <div class="quick-setup" id="quick-setup">
+      <div class="quick-setup-title">⚡ ตั้งค่าด่วน — เชื่อม OpenClaw ใน 1 คลิก</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">เลือกผู้ให้บริการ</label>
+          <select class="form-input" id="qs-provider" onchange="updateQsModels()"></select>
         </div>
-        <div class="form-group" style="flex:1;min-width:200px;">
+        <div class="form-group">
+          <label class="form-label">เลือกโมเดล</label>
+          <select class="form-input" id="qs-model"></select>
+        </div>
+        <div class="form-group" style="flex:0;">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn btn-primary" onclick="quickSetup()">⚡ เชื่อมเลย</button>
+        </div>
+      </div>
+      <div id="qs-result" style="display:none; margin-top:12px;"></div>
+    </div>
+
+    <!-- Provider Overview -->
+    <div class="page-header" style="margin-top:8px;">
+      <div class="page-title" style="font-size:1.1rem;">🔌 สถานะผู้ให้บริการ</div>
+    </div>
+    <div class="provider-grid" id="providers-overview"></div>
+  </div>
+
+  <!-- ═══ Page: Providers ═══ -->
+  <div class="page" id="page-providers">
+    <div class="page-header">
+      <div class="page-title">🔌 ผู้ให้บริการทั้งหมด</div>
+      <div class="page-subtitle">ผู้ให้บริการ AI ที่รองรับ — ใส่ Key แล้วใช้ได้เลย</div>
+    </div>
+    <div class="provider-grid" id="providers-full"></div>
+  </div>
+
+  <!-- ═══ Page: API Keys ═══ -->
+  <div class="page" id="page-keys">
+    <div class="page-header">
+      <div class="page-title">🔑 จัดการ API Key</div>
+      <div class="page-subtitle">ใส่ API Key อย่างน้อย 1 ตัวเพื่อเริ่มใช้งาน แนะนำเริ่มจาก Groq (ฟรี + เร็ว)</div>
+    </div>
+    <div class="card">
+      <div id="keys-list"></div>
+      <div style="margin-top:20px; display:flex; gap:10px;">
+        <button class="btn btn-primary" onclick="saveKeys()">💾 บันทึก API Key</button>
+        <button class="btn btn-ghost" onclick="toggleKeyVisibility()">👁️ แสดง/ซ่อน Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Page: OpenClaw ═══ -->
+  <div class="page" id="page-openclaw">
+    <div class="page-header">
+      <div class="page-title">🤖 เชื่อมต่อกับ OpenClaw</div>
+      <div class="page-subtitle">ตั้งค่า OpenClaw ให้ใช้ RouterAI เป็น backend — ง่ายแค่ 3 ขั้นตอน</div>
+    </div>
+
+    <!-- Steps -->
+    <div class="steps">
+      <div class="step" id="step1">
+        <div class="step-num">1</div>
+        <div class="step-title">ใส่ API Key</div>
+        <div class="step-desc">อย่างน้อย 1 ตัว</div>
+      </div>
+      <div class="step" id="step2">
+        <div class="step-num">2</div>
+        <div class="step-title">เลือกโมเดล</div>
+        <div class="step-desc">Provider + Model</div>
+      </div>
+      <div class="step" id="step3">
+        <div class="step-num">3</div>
+        <div class="step-title">คัดลอก Config</div>
+        <div class="step-desc">วางใน OpenClaw</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:16px; font-size:1rem;">เลือกผู้ให้บริการและโมเดล</h3>
+      <div class="provider-selector" id="oc-provider-chips"></div>
+      <div class="form-row" style="margin-top:16px;">
+        <div class="form-group">
           <label class="form-label">โมเดล</label>
           <select class="form-input" id="oc-model"></select>
         </div>
@@ -484,173 +856,230 @@ tr:hover td { background: var(--bg3); }
       <button class="btn btn-primary" onclick="generateOcConfig()">⚡ สร้าง Config</button>
     </div>
 
-    <div class="card" id="oc-result" style="margin-top:16px;display:none;">
-      <h3 style="margin-bottom:12px;">📋 Config สำหรับ OpenClaw</h3>
-      <p style="color:var(--text2);margin-bottom:12px;" id="oc-instructions"></p>
+    <div class="card" id="oc-result" style="display:none; margin-top:16px;">
+      <h3 style="margin-bottom:12px; font-size:1rem;">📋 Config สำหรับ OpenClaw</h3>
+      <p style="color:var(--text2); margin-bottom:12px; font-size:0.85rem;" id="oc-instructions"></p>
       <div class="code-block" id="oc-code"></div>
-      <button class="btn btn-success" onclick="copyOcConfig()" style="margin-top:12px;">📋 คัดลอก</button>
+      <div style="margin-top:12px; display:flex; gap:10px;">
+        <button class="btn btn-success" onclick="copyOcConfig()">📋 คัดลอก Config</button>
+        <button class="btn btn-ghost" onclick="downloadConfig()">💾 ดาวน์โหลดไฟล์</button>
+      </div>
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <h3 style="margin-bottom:12px;">🔧 วิธีตั้งค่าใน OpenClaw</h3>
-      <div class="code-block"><span style="color:#8b949e"># วิธีที่ 1: ใช้คำสั่ง (แนะนำ)</span>
-openclaw config
+      <h3 style="margin-bottom:12px; font-size:1rem;">🔧 วิธีใช้กับ OpenClaw</h3>
+      <div class="code-block"><span class="comment"># วิธีที่ 1: คัดลอก config ไปวาง</span>
+<span class="cmd">nano ~/.openclaw/openclaw.json</span>
+<span class="comment"># วาง config ที่คัดลอกมา แล้ว save</span>
 
-<span style="color:#8b949e"># วิธีที่ 2: แก้ไขไฟล์โดยตรง</span>
-nano ~/.openclaw/openclaw.json
+<span class="comment"># วิธีที่ 2: รีสตาร์ท OpenClaw</span>
+<span class="cmd">openclaw restart</span>
 
-<span style="color:#8b949e"># หลังจากแก้ไข config แล้ว:</span>
-openclaw restart</div>
+<span class="comment"># ตรวจสอบสถานะ</span>
+<span class="cmd">openclaw status</span></div>
     </div>
   </div>
 
-  <!-- Page: Config -->
+  <!-- ═══ Page: Models ═══ -->
+  <div class="page" id="page-models">
+    <div class="page-header">
+      <div class="page-title">🧠 เลือกโมเดล</div>
+      <div class="page-subtitle">ดูโมเดลทั้งหมดที่มี — ฟิลเตอร์ตามความต้องการ</div>
+    </div>
+    <div style="margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm filter-btn active" data-filter="all" onclick="filterModels('all')">ทั้งหมด</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-filter="free" onclick="filterModels('free')">🆓 ฟรี</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-filter="paid" onclick="filterModels('paid')">💰 จ่ายเงิน</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-filter="fast" onclick="filterModels('fast')">⚡ เร็ว</button>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.85rem;" id="models-table">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left; padding:10px; color:var(--text2); font-size:0.75rem;">โมเดล</th>
+            <th style="text-align:left; padding:10px; color:var(--text2); font-size:0.75rem;">ผู้ให้บริการ</th>
+            <th style="text-align:center; padding:10px; color:var(--text2); font-size:0.75rem;">Context</th>
+            <th style="text-align:center; padding:10px; color:var(--text2); font-size:0.75rem;">ราคา</th>
+            <th style="text-align:center; padding:10px; color:var(--text2); font-size:0.75rem;">ความเร็ว</th>
+            <th style="text-align:center; padding:10px; color:var(--text2); font-size:0.75rem;">Priority</th>
+          </tr>
+        </thead>
+        <tbody id="models-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ Page: Config ═══ -->
   <div class="page" id="page-config">
-    <div class="page-title">⚙️ ตั้งค่าระบบ</div>
+    <div class="page-header">
+      <div class="page-title">⚙️ ตั้งค่าระบบ</div>
+      <div class="page-subtitle">ปรับแต่งการทำงานของ RouterAI</div>
+    </div>
     <div class="card">
       <div class="form-group">
         <label class="form-label">โหมดการเลือก Provider</label>
         <select class="form-input" id="cfg-prefer-free">
-          <option value="true">เลือกของฟรีก่อน (แนะนำ)</option>
-          <option value="false">เลือกตามคุณภาพ</option>
+          <option value="true">🆓 เลือกของฟรีก่อน (แนะนำ)</option>
+          <option value="false">⭐ เลือกตามคุณภาพ</option>
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Auto-Failover (สลับอัตโนมัติเมื่อ Error)</label>
         <select class="form-input" id="cfg-auto-failover">
-          <option value="true">เปิด (แนะนำ)</option>
-          <option value="false">ปิด</option>
+          <option value="true">✅ เปิด (แนะนำ)</option>
+          <option value="false">❌ ปิด</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Response Cache (จำคำตอบเดิม)</label>
+        <label class="form-label">Response Cache (จำคำตอบเดิม ลดการเรียกซ้ำ)</label>
         <select class="form-input" id="cfg-cache">
-          <option value="true">เปิด (แนะนำ)</option>
-          <option value="false">ปิด</option>
+          <option value="true">✅ เปิด (แนะนำ — ประหยัด Token)</option>
+          <option value="false">❌ ปิด</option>
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Cache TTL (วินาที)</label>
-        <input class="form-input" type="number" id="cfg-cache-ttl" value="3600" min="60">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Cache TTL (วินาที)</label>
+          <input class="form-input" type="number" id="cfg-cache-ttl" value="3600" min="60">
+          <div class="form-hint">ค่าเริ่มต้น 3600 = 1 ชั่วโมง</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Timeout (วินาที)</label>
+          <input class="form-input" type="number" id="cfg-timeout" value="60" min="10">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">งบประมาณรายวัน (USD, 0 = ไม่จำกัด)</label>
         <input class="form-input" type="number" id="cfg-budget" value="0" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Timeout (วินาที)</label>
-        <input class="form-input" type="number" id="cfg-timeout" value="60" min="10">
+        <div class="form-hint">เมื่อเกินงบ → สลับไปโมเดลที่ถูกกว่าอัตโนมัติ</div>
       </div>
       <button class="btn btn-primary" onclick="saveConfig()">💾 บันทึกการตั้งค่า</button>
     </div>
   </div>
 
-  <!-- Page: Install Guide -->
-  <div class="page" id="page-install">
-    <div class="page-title">📦 คู่มือติดตั้ง</div>
-    <div class="tabs">
-      <div class="tab active" data-tab="install-docker">🐳 Docker (แนะนำ)</div>
-      <div class="tab" data-tab="install-manual">💻 Manual</div>
-    </div>
-
-    <div class="tab-content active" id="tab-install-docker">
-      <div class="card">
-        <h3 style="margin-bottom:12px;">🐳 ติดตั้งด้วย Docker (ง่ายที่สุด)</h3>
-        <p style="color:var(--text2);margin-bottom:16px;">ต้องมี Docker ติดตั้งก่อน</p>
-        <div class="code-block"><span style="color:#8b949e"># 1. ดาวน์โหลด</span>
-git clone https://github.com/tenotony/RouterAI.git
-cd RouterAI
-
-<span style="color:#8b949e"># 2. รันเลย!</span>
-docker compose up -d
-
-<span style="color:#8b949e"># 3. เปิด Dashboard</span>
-<span style="color:#7ee787"># http://localhost:8899</span>
-
-<span style="color:#8b949e"># อัพเดตเมื่อมีโค้ดใหม่:</span>
-bash scripts/update.sh</div>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-install-manual">
-      <div class="card">
-        <h3 style="margin-bottom:12px;">💻 ติดตั้งด้วยมือ (ไม่ต้องใช้ Docker)</h3>
-        <div class="code-block"><span style="color:#8b949e"># 1. ดาวน์โหลด</span>
-git clone https://github.com/tenotony/RouterAI.git
-cd RouterAI
-
-<span style="color:#8b949e"># 2. สร้าง Virtual Environment</span>
-python3 -m venv venv
-source venv/bin/activate
-
-<span style="color:#8b949e"># 3. ติดตั้ง Dependencies</span>
-pip install -r requirements.txt
-
-<span style="color:#8b949e"># 4. รัน Proxy (Terminal 1)</span>
-python src/proxy.py
-
-<span style="color:#8b949e"># 5. รัน Dashboard (Terminal 2)</span>
-python src/dashboard.py
-
-<span style="color:#8b949e"># 6. เปิด Dashboard</span>
-<span style="color:#7ee787"># http://localhost:8899</span></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h3 style="margin-bottom:12px;">⚡ One-Line Install</h3>
-      <div class="code-block">curl -fsSL https://raw.githubusercontent.com/tenotony/RouterAI/main/scripts/install.sh | bash</div>
-    </div>
-  </div>
-
-  <!-- Page: Health -->
+  <!-- ═══ Page: Health ═══ -->
   <div class="page" id="page-health">
-    <div class="page-title">🩺 ตรวจสอบระบบ</div>
-    <div id="health-content">
-      <div class="card" style="text-align:center;padding:40px;">
+    <div class="page-header">
+      <div class="page-title">🩺 ตรวจสอบระบบ</div>
+      <div class="page-subtitle">สถานะสุขภาพของระบบและผู้ให้บริการทั้งหมด</div>
+    </div>
+    <div class="card" id="health-content">
+      <div style="text-align:center; padding:40px;">
         <p style="font-size:2rem;">⏳</p>
         <p style="color:var(--text2);">กำลังตรวจสอบ...</p>
       </div>
     </div>
-    <button class="btn btn-secondary" onclick="checkHealth()" style="margin-top:16px;">🔄 ตรวจสอบอีกครั้ง</button>
+    <div style="margin-top:16px; display:flex; gap:10px;">
+      <button class="btn btn-ghost" onclick="checkHealth()">🔄 ตรวจสอบอีกครั้ง</button>
+      <button class="btn btn-ghost" onclick="checkAllProviders()">🧪 ทดสอบทุก Provider</button>
+    </div>
+    <div id="test-results" style="margin-top:16px;"></div>
+  </div>
+
+  <!-- ═══ Page: Install ═══ -->
+  <div class="page" id="page-install">
+    <div class="page-header">
+      <div class="page-title">📦 คู่มือติดตั้ง</div>
+      <div class="page-subtitle">เลือกวิธีติดตั้งที่เหมาะกับคุณ</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px;">⚡ ติดตั้งอัตโนมัติ (แนะนำสำหรับผู้เริ่มต้น)</h3>
+      <p style="color:var(--text2); margin-bottom:12px; font-size:0.85rem;">
+        คำสั่งเดียวจบ — ระบบจะติดตั้ง Docker (ถ้าไม่มี), ดาวน์โหลดโค้ด, และเริ่มทำงานให้อัตโนมัติ
+      </p>
+      <div class="code-block"><span class="cmd">curl -fsSL https://raw.githubusercontent.com/tenotony/RouterAI/main/scripts/install-docker.sh | bash</span></div>
+      <p style="color:var(--text3); font-size:0.75rem; margin-top:8px;">⚠️ ต้องมีสิทธิ์ sudo สำหรับติดตั้ง Docker</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px;">🐳 ติดตั้งด้วย Docker</h3>
+      <div class="code-block"><span class="comment"># 1. ดาวน์โหลด</span>
+<span class="cmd">git clone https://github.com/tenotony/RouterAI.git</span>
+<span class="cmd">cd RouterAI</span>
+
+<span class="comment"># 2. รันด้วย Docker Compose</span>
+<span class="cmd">docker compose up -d</span>
+
+<span class="comment"># 3. เปิด Dashboard</span>
+<span class="ok">http://localhost:8899</span>
+
+<span class="comment"># อัพเดตเมื่อมีเวอร์ชั่นใหม่:</span>
+<span class="cmd">bash scripts/update.sh</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px;">💻 ติดตั้งด้วยมือ (ไม่ต้องใช้ Docker)</h3>
+      <div class="code-block"><span class="comment"># 1. ดาวน์โหลด</span>
+<span class="cmd">git clone https://github.com/tenotony/RouterAI.git</span>
+<span class="cmd">cd RouterAI</span>
+
+<span class="comment"># 2. สร้าง Virtual Environment</span>
+<span class="cmd">python3 -m venv venv</span>
+<span class="cmd">source venv/bin/activate</span>
+
+<span class="comment"># 3. ติดตั้ง Dependencies</span>
+<span class="cmd">pip install -r requirements.txt</span>
+
+<span class="comment"># 4. รัน Proxy (Terminal 1)</span>
+<span class="cmd">python src/proxy.py</span>
+
+<span class="comment"># 5. รัน Dashboard (Terminal 2)</span>
+<span class="cmd">python src/dashboard.py</span>
+
+<span class="comment"># Dashboard: </span><span class="ok">http://localhost:8899</span>
+<span class="comment"># API Proxy: </span><span class="ok">http://localhost:8900</span></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:12px;">🖥️ ระบบปฏิบัติการที่รองรับ</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:var(--radius-sm);">
+          <div style="font-size:2rem;">🐧</div>
+          <div style="font-weight:600; margin-top:4px;">Linux</div>
+          <div style="font-size:0.75rem; color:var(--text2);">Ubuntu, Debian, CentOS</div>
+        </div>
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:var(--radius-sm);">
+          <div style="font-size:2rem;">🍎</div>
+          <div style="font-weight:600; margin-top:4px;">macOS</div>
+          <div style="font-size:0.75rem; color:var(--text2);">Intel + Apple Silicon</div>
+        </div>
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:var(--radius-sm);">
+          <div style="font-size:2rem;">🪟</div>
+          <div style="font-weight:600; margin-top:4px;">Windows</div>
+          <div style="font-size:0.75rem; color:var(--text2);">WSL2 แนะนำ</div>
+        </div>
+        <div style="text-align:center; padding:16px; background:var(--bg3); border-radius:var(--radius-sm);">
+          <div style="font-size:2rem;">🍓</div>
+          <div style="font-weight:600; margin-top:4px;">Raspberry Pi</div>
+          <div style="font-size:0.75rem; color:var(--text2);">ARM64</div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
 
-<!-- Toast Container -->
+<!-- Toast -->
 <div class="toast-container" id="toast-container"></div>
-
-<!-- Modal -->
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal" id="modal-content"></div>
-</div>
 
 <script>
 const API = window.location.origin;
 let providersData = [];
+let selectedOcProvider = '';
 
 // ── Navigation ──
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    item.classList.add('active');
-    const page = item.dataset.page;
-    document.getElementById('page-' + page).classList.add('active');
-    loadPage(page);
-  });
-});
+function navTo(page) {
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (navItem) navItem.classList.add('active');
+  document.getElementById('page-' + page).classList.add('active');
+  loadPage(page);
+}
 
-// ── Tab Navigation ──
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    const parent = tab.parentElement;
-    parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const tabId = tab.dataset.tab;
-    parent.parentElement.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-    document.getElementById('tab-' + tabId).classList.add('active');
-  });
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => navTo(item.dataset.page));
 });
 
 // ── Toast ──
@@ -658,9 +1087,10 @@ function toast(msg, type = 'success') {
   const c = document.getElementById('toast-container');
   const t = document.createElement('div');
   t.className = 'toast ' + type;
-  t.innerHTML = (type === 'success' ? '✅' : '❌') + ' ' + msg;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  t.innerHTML = `<span>${icons[type] || '✅'}</span><span>${msg}</span>`;
   c.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(80px)'; setTimeout(() => t.remove(), 300); }, 4000);
 }
 
 // ── Load Pages ──
@@ -670,45 +1100,64 @@ function loadPage(page) {
     case 'providers': loadProviders(); break;
     case 'keys': loadKeysForm(); break;
     case 'openclaw': loadOcProviders(); break;
+    case 'models': loadModels(); break;
     case 'config': loadConfig(); break;
     case 'health': checkHealth(); break;
   }
 }
 
+// ── Dashboard ──
 async function loadDashboard() {
   try {
     const res = await fetch('/api/providers');
     const data = await res.json();
     providersData = data.providers || [];
 
-    // Stats
     const available = providersData.filter(p => p.available).length;
-    const free = providersData.filter(p => p.has_key && p.models.some(m => m.free)).length;
+    const hasKey = providersData.filter(p => p.has_key).length;
+    const freeModels = providersData.reduce((s, p) => s + p.models.filter(m => m.free).length, 0);
     const totalModels = providersData.reduce((s, p) => s + p.models.length, 0);
 
     document.getElementById('stats-grid').innerHTML = `
-      <div class="stat-card"><div class="stat-value">${providersData.length}</div><div class="stat-label">ผู้ให้บริการทั้งหมด</div></div>
-      <div class="stat-card"><div class="stat-value">${available}</div><div class="stat-label">พร้อมใช้งาน</div></div>
-      <div class="stat-card"><div class="stat-value">${free}</div><div class="stat-label">มีโมเดลฟรี</div></div>
-      <div class="stat-card"><div class="stat-value">${totalModels}</div><div class="stat-label">โมเดลทั้งหมด</div></div>
+      <div class="stat-card purple"><div class="stat-icon">🔌</div><div class="stat-value purple">${providersData.length}</div><div class="stat-label">ผู้ให้บริการทั้งหมด</div></div>
+      <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-value green">${available}</div><div class="stat-label">พร้อมใช้งาน</div></div>
+      <div class="stat-card orange"><div class="stat-icon">🆓</div><div class="stat-value orange">${freeModels}</div><div class="stat-label">โมเดลฟรี</div></div>
+      <div class="stat-card blue"><div class="stat-icon">🧠</div><div class="stat-value blue">${totalModels}</div><div class="stat-label">โมเดลทั้งหมด</div></div>
     `;
+
+    document.getElementById('badge-providers').textContent = available;
+
+    // Welcome banner
+    document.getElementById('welcome-banner').style.display = hasKey > 0 ? 'none' : 'block';
+
+    // Quick setup
+    const qsSelect = document.getElementById('qs-provider');
+    qsSelect.innerHTML = providersData.filter(p => p.has_key).map(p =>
+      `<option value="${p.id}">${p.flag || '🌐'} ${p.name}</option>`
+    ).join('');
+    updateQsModels();
 
     // Provider overview
     document.getElementById('providers-overview').innerHTML = providersData.map(p => {
-      const statusClass = p.available ? 'on' : (p.has_key ? 'warn' : 'off');
-      const cardClass = p.available ? 'available' : 'unavailable';
+      const cls = p.available ? 'has-key' : '';
+      const statusCls = p.available ? 'active' : (p.has_key ? 'nokey' : 'inactive');
+      const statusLabel = p.available ? 'พร้อมใช้' : (p.has_key ? 'มี Key แต่ Error' : 'ยังไม่ใส่ Key');
       return `
-        <div class="provider-card ${cardClass}">
-          <div class="provider-name">
-            <span class="status-dot ${statusClass}"></span>
-            ${p.name}
+        <div class="provider-card ${cls}">
+          <div class="provider-top">
+            <div class="provider-flag">${p.flag || '🌐'}</div>
+            <div class="provider-info">
+              <div class="provider-name">${p.name}</div>
+              <div class="provider-desc">${p.desc || ''}</div>
+            </div>
+            <div class="provider-status ${statusCls}">
+              <span class="status-dot ${p.available ? 'on' : (p.has_key ? 'wait' : 'off')}"></span>
+              ${statusLabel}
+            </div>
           </div>
-          <div style="margin-top:8px;font-size:0.82rem;color:var(--text2);">
-            ${p.has_key ? '✅ มี API Key' : '❌ ยังไม่ใส่ Key'} ${p.speed}
-          </div>
-          <div class="provider-models">
-            ${p.models.slice(0, 3).map(m => `<span class="model-tag ${m.free ? 'free' : ''}">${m.id}</span>`).join('')}
-            ${p.models.length > 3 ? `<span class="model-tag">+${p.models.length - 3}</span>` : ''}
+          <div class="models-row">
+            ${p.models.slice(0, 4).map(m => `<span class="model-tag ${m.free ? 'free' : ''}">${m.id}</span>`).join('')}
+            ${p.models.length > 4 ? `<span class="model-tag">+${p.models.length - 4}</span>` : ''}
           </div>
         </div>
       `;
@@ -718,6 +1167,44 @@ async function loadDashboard() {
   }
 }
 
+function updateQsModels() {
+  const pid = document.getElementById('qs-provider').value;
+  const provider = providersData.find(p => p.id === pid);
+  if (!provider) return;
+  const sel = document.getElementById('qs-model');
+  sel.innerHTML = provider.models.map(m =>
+    `<option value="${m.id}">${m.id} ${m.free ? '🆓' : '💰'}</option>`
+  ).join('');
+}
+
+async function quickSetup() {
+  const pid = document.getElementById('qs-provider').value;
+  const mid = document.getElementById('qs-model').value;
+  if (!pid) { toast('กรุณาใส่ API Key ก่อน', 'error'); return; }
+
+  try {
+    const res = await fetch('/api/openclaw-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ provider: pid, model: mid })
+    });
+    const data = await res.json();
+    const el = document.getElementById('qs-result');
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div class="code-block" style="margin-bottom:10px;">${JSON.stringify(data.config, null, 2)}</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-success btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(JSON.stringify(data.config, null, 2))}).then(()=>toast('คัดลอกแล้ว! 📋'))">📋 คัดลอก</button>
+        <span style="color:var(--text2); font-size:0.8rem; line-height:2;">วางใน ~/.openclaw/openclaw.json แล้วรัน openclaw restart</span>
+      </div>
+    `;
+    toast('สร้าง Config สำเร็จ!', 'info');
+  } catch(e) {
+    toast('สร้าง config ล้มเหลว', 'error');
+  }
+}
+
+// ── Providers Page ──
 async function loadProviders() {
   try {
     const res = await fetch('/api/providers');
@@ -725,21 +1212,27 @@ async function loadProviders() {
     providersData = data.providers || [];
 
     document.getElementById('providers-full').innerHTML = providersData.map(p => {
-      const statusClass = p.available ? 'on' : (p.has_key ? 'warn' : 'off');
-      const cardClass = p.available ? 'available' : 'unavailable';
+      const cls = p.available ? 'has-key' : '';
+      const statusCls = p.available ? 'active' : (p.has_key ? 'nokey' : 'inactive');
+      const statusLabel = p.available ? 'พร้อมใช้' : (p.has_key ? '⚠️ มี Key แต่ Error' : '🔑 ยังไม่ใส่ Key');
       return `
-        <div class="provider-card ${cardClass}">
-          <div class="provider-name">
-            <span class="status-dot ${statusClass}"></span>
-            ${p.name}
-            ${p.available ? '<span class="badge badge-green">พร้อมใช้</span>' : '<span class="badge badge-red">ยังไม่ใส่ Key</span>'}
+        <div class="provider-card ${cls}">
+          <div class="provider-top">
+            <div class="provider-flag">${p.flag || '🌐'}</div>
+            <div class="provider-info">
+              <div class="provider-name">${p.name}</div>
+              <div class="provider-desc">${p.desc || ''} ${p.speed}</div>
+            </div>
+            <div class="provider-status ${statusCls}">
+              <span class="status-dot ${p.available ? 'on' : (p.has_key ? 'wait' : 'off')}"></span>
+              ${statusLabel}
+            </div>
           </div>
-          <div style="margin-top:8px;font-size:0.82rem;color:var(--text2);">ความเร็ว: ${p.speed}</div>
-          <div class="provider-models">
-            ${p.models.map(m => `<span class="model-tag ${m.free ? 'free' : ''}">${m.id} ${m.free ? '🆓' : '💰'}</span>`).join('')}
+          <div class="models-row">
+            ${p.models.map(m => `<span class="model-tag ${m.free ? 'free' : ''}" title="${m.desc || ''}">${m.id}</span>`).join('')}
           </div>
-          <div class="provider-actions">
-            <a href="${p.signup_url}" target="_blank" class="btn btn-secondary btn-sm">🔗 สมัคร Key</a>
+          <div class="actions-row">
+            <a href="${p.signup_url}" target="_blank" class="btn btn-ghost btn-sm">🔗 สมัคร Key</a>
             ${p.has_key ? `<button class="btn btn-primary btn-sm" onclick="testProvider('${p.id}')">🧪 ทดสอบ</button>` : ''}
           </div>
         </div>
@@ -750,29 +1243,41 @@ async function loadProviders() {
   }
 }
 
+// ── Keys Page ──
 async function loadKeysForm() {
   try {
     const res = await fetch('/api/providers');
     const data = await res.json();
     providersData = data.providers || [];
 
-    document.getElementById('keys-form').innerHTML = providersData
+    const envMap = {
+      groq: 'GROQ_API_KEY', mimo: 'MIMO_API_KEY', google: 'GOOGLE_API_KEY',
+      cerebras: 'CEREBRAS_API_KEY', openrouter: 'OPENROUTER_API_KEY',
+      mistral: 'MISTRAL_API_KEY', nvidia: 'NVIDIA_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY', siliconflow: 'SILICONFLOW_API_KEY',
+      chutes: 'CHUTES_API_KEY', together: 'TOGETHER_API_KEY'
+    };
+
+    document.getElementById('keys-list').innerHTML = providersData
       .filter(p => p.id !== 'ollama')
       .map(p => {
-        const envMap = {
-          groq: 'GROQ_API_KEY', google: 'GOOGLE_API_KEY', cerebras: 'CEREBRAS_API_KEY',
-          openrouter: 'OPENROUTER_API_KEY', mistral: 'MISTRAL_API_KEY', nvidia: 'NVIDIA_API_KEY',
-          deepseek: 'DEEPSEEK_API_KEY', siliconflow: 'SILICONFLOW_API_KEY', together: 'TOGETHER_API_KEY'
-        };
         const key = envMap[p.id] || p.id.toUpperCase() + '_API_KEY';
         return `
-          <div class="form-group">
-            <label class="form-label">${p.name} ${p.has_key ? '<span class="badge badge-green">มี Key แล้ว</span>' : ''}</label>
-            <div style="display:flex;gap:8px;">
-              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key ที่นี่..." data-key="${key}">
-              <a href="${p.signup_url}" target="_blank" class="btn btn-secondary">สมัคร</a>
+          <div class="key-row">
+            <div class="key-provider">
+              <span class="kp-flag">${p.flag || '🌐'}</span>
+              <div>
+                <div class="kp-name">${p.name}</div>
+                <div class="key-models">${p.models.length} โมเดล ${p.models.some(m=>m.free) ? '· มีฟรี' : ''}</div>
+              </div>
             </div>
-            <div style="font-size:0.75rem;color:var(--text2);margin-top:4px;">Models: ${p.models.map(m => m.id).join(', ')}</div>
+            <div class="key-input-wrap">
+              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key..." data-key="${key}">
+              <a href="${p.signup_url}" target="_blank" class="btn btn-ghost btn-sm">สมัคร</a>
+            </div>
+            <div>
+              ${p.has_key ? '<span class="badge badge-green">✅ มีแล้ว</span>' : '<span class="badge badge-yellow">ยังไม่ใส่</span>'}
+            </div>
           </div>
         `;
       }).join('');
@@ -781,86 +1286,157 @@ async function loadKeysForm() {
   }
 }
 
+let keysVisible = false;
+function toggleKeyVisibility() {
+  keysVisible = !keysVisible;
+  document.querySelectorAll('#keys-list input[type="password"], #keys-list input[type="text"]').forEach(input => {
+    input.type = keysVisible ? 'text' : 'password';
+  });
+}
+
 async function saveKeys() {
   const keys = {};
-  document.querySelectorAll('#keys-form input[type="password"]').forEach(input => {
+  document.querySelectorAll('#keys-list input').forEach(input => {
     const val = input.value.trim();
     if (val) keys[input.dataset.key] = val;
   });
-
-  if (Object.keys(keys).length === 0) {
-    toast('กรุณาใส่ API Key อย่างน้อย 1 ตัว', 'error');
-    return;
-  }
-
+  if (Object.keys(keys).length === 0) { toast('กรุณาใส่ API Key อย่างน้อย 1 ตัว', 'error'); return; }
   try {
-    const res = await fetch('/api/keys', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(keys)
-    });
+    const res = await fetch('/api/keys', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(keys) });
     const data = await res.json();
     toast(data.message || 'บันทึกสำเร็จ');
     loadKeysForm();
-  } catch(e) {
-    toast('บันทึกล้มเหลว: ' + e.message, 'error');
-  }
+  } catch(e) { toast('บันทึกล้มเหลว', 'error'); }
 }
 
+// ── OpenClaw Page ──
 async function loadOcProviders() {
   try {
     const res = await fetch('/api/providers');
     const data = await res.json();
     providersData = data.providers || [];
 
-    const select = document.getElementById('oc-provider');
-    select.innerHTML = providersData
-      .filter(p => p.available)
-      .map(p => `<option value="${p.id}">${p.name}</option>`)
-      .join('');
+    // Update steps
+    const hasKey = providersData.some(p => p.has_key);
+    document.getElementById('step1').className = 'step ' + (hasKey ? 'done' : 'active');
 
-    updateOcModels();
-  } catch(e) {
-    toast('โหลดข้อมูลล้มเหลว', 'error');
-  }
+    const chips = document.getElementById('oc-provider-chips');
+    chips.innerHTML = providersData.filter(p => p.has_key).map(p => `
+      <div class="provider-chip ${selectedOcProvider === p.id ? 'selected' : ''}" onclick="selectOcProvider('${p.id}')">
+        <div class="chip-flag">${p.flag || '🌐'}</div>
+        <div class="chip-name">${p.name.replace(/[^\w\sก-๙]/g, '').trim()}</div>
+        <div class="chip-speed">${p.speed}</div>
+      </div>
+    `).join('');
+
+    if (!selectedOcProvider && providersData.filter(p => p.has_key).length > 0) {
+      selectOcProvider(providersData.find(p => p.has_key).id);
+    }
+  } catch(e) { toast('โหลดข้อมูลล้มเหลว', 'error'); }
 }
 
-function updateOcModels() {
-  const providerId = document.getElementById('oc-provider').value;
-  const provider = providersData.find(p => p.id === providerId);
-  if (!provider) return;
+function selectOcProvider(pid) {
+  selectedOcProvider = pid;
+  document.querySelectorAll('.provider-chip').forEach(c => c.classList.remove('selected'));
+  event.currentTarget?.classList.add('selected');
+  document.getElementById('step2').className = 'step active';
 
-  const select = document.getElementById('oc-model');
-  select.innerHTML = provider.models.map(m =>
+  const provider = providersData.find(p => p.id === pid);
+  if (!provider) return;
+  const sel = document.getElementById('oc-model');
+  sel.innerHTML = provider.models.map(m =>
     `<option value="${m.id}">${m.id} ${m.free ? '🆓 (ฟรี)' : '💰'}</option>`
   ).join('');
 }
 
 async function generateOcConfig() {
-  const providerId = document.getElementById('oc-provider').value;
-  const modelId = document.getElementById('oc-model').value;
+  const pid = selectedOcProvider;
+  const mid = document.getElementById('oc-model').value;
+  if (!pid) { toast('กรุณาเลือกผู้ให้บริการ', 'error'); return; }
+
+  document.getElementById('step3').className = 'step active';
 
   try {
     const res = await fetch('/api/openclaw-config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({provider: providerId, model: modelId})
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ provider: pid, model: mid })
     });
     const data = await res.json();
-
     document.getElementById('oc-result').style.display = 'block';
     document.getElementById('oc-instructions').textContent = data.instructions;
     document.getElementById('oc-code').textContent = JSON.stringify(data.config, null, 2);
-  } catch(e) {
-    toast('สร้าง config ล้มเหลว', 'error');
-  }
+    document.getElementById('step3').className = 'step done';
+  } catch(e) { toast('สร้าง config ล้มเหลว', 'error'); }
 }
 
 function copyOcConfig() {
   const code = document.getElementById('oc-code').textContent;
-  navigator.clipboard.writeText(code).then(() => toast('คัดลอกแล้ว! 📋'));
+  navigator.clipboard.writeText(code).then(() => toast('คัดลอก Config แล้ว! 📋'));
 }
 
+function downloadConfig() {
+  const code = document.getElementById('oc-code').textContent;
+  const blob = new Blob([code], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'openclaw-config.json';
+  a.click(); URL.revokeObjectURL(url);
+  toast('ดาวน์โหลด Config แล้ว! 💾');
+}
+
+// ── Models Page ──
+let allModels = [];
+async function loadModels() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providersData = data.providers || [];
+
+    allModels = [];
+    providersData.forEach(p => {
+      p.models.forEach(m => {
+        allModels.push({ ...m, provider: p.name, providerId: p.id, flag: p.flag || '🌐', speed: p.speed });
+      });
+    });
+    allModels.sort((a, b) => b.priority - a.priority);
+    renderModels(allModels);
+  } catch(e) { toast('โหลดข้อมูลล้มเหลว', 'error'); }
+}
+
+function renderModels(models) {
+  const tbody = document.getElementById('models-tbody');
+  tbody.innerHTML = models.map(m => `
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:12px 10px;">
+        <div style="font-weight:600;">${m.id}</div>
+        <div style="font-size:0.72rem; color:var(--text3);">${m.desc || ''}</div>
+      </td>
+      <td style="padding:12px 10px;">${m.flag} ${m.provider}</td>
+      <td style="text-align:center; padding:12px 10px; color:var(--text2);">${m.context ? (m.context >= 1000000 ? (m.context/1000000).toFixed(0) + 'M' : (m.context/1000).toFixed(0) + 'K') : '-'}</td>
+      <td style="text-align:center; padding:12px 10px;">${m.free ? '<span class="badge badge-green">🆓 ฟรี</span>' : '<span class="badge badge-yellow">💰 $' + ((m.cost_per_1k || 0) * 1).toFixed(4) + '/1K</span>'}</td>
+      <td style="text-align:center; padding:12px 10px; font-size:0.8rem;">${m.speed}</td>
+      <td style="text-align:center; padding:12px 10px;">
+        <div style="background:var(--bg3); border-radius:6px; height:6px; width:80px; margin:0 auto;">
+          <div style="background:linear-gradient(90deg, var(--accent), var(--pink)); height:100%; width:${m.priority}%; border-radius:6px;"></div>
+        </div>
+        <div style="font-size:0.7rem; color:var(--text3); margin-top:2px;">${m.priority}</div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterModels(filter) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  let filtered = allModels;
+  if (filter === 'free') filtered = allModels.filter(m => m.free);
+  else if (filter === 'paid') filtered = allModels.filter(m => !m.free);
+  else if (filter === 'fast') filtered = allModels.filter(m => m.priority >= 90);
+  renderModels(filtered);
+}
+
+// ── Config Page ──
 async function loadConfig() {
   try {
     const res = await fetch('/api/config');
@@ -871,9 +1447,7 @@ async function loadConfig() {
     document.getElementById('cfg-cache-ttl').value = cfg.cache_ttl ?? 3600;
     document.getElementById('cfg-budget').value = cfg.budget_daily_usd ?? 0;
     document.getElementById('cfg-timeout').value = cfg.timeout ?? 60;
-  } catch(e) {
-    toast('โหลดการตั้งค่าล้มเหลว', 'error');
-  }
+  } catch(e) { toast('โหลดการตั้งค่าล้มเหลว', 'error'); }
 }
 
 async function saveConfig() {
@@ -885,78 +1459,95 @@ async function saveConfig() {
     budget_daily_usd: parseFloat(document.getElementById('cfg-budget').value),
     timeout: parseInt(document.getElementById('cfg-timeout').value)
   };
+  try {
+    await fetch('/api/config', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(cfg) });
+    toast('บันทึกการตั้งค่าเรียบร้อย ✅');
+  } catch(e) { toast('บันทึกล้มเหลว', 'error'); }
+}
+
+// ── Health Page ──
+async function checkHealth() {
+  const el = document.getElementById('health-content');
+  el.innerHTML = '<div style="text-align:center;padding:40px;"><p style="font-size:2rem;">⏳</p><p style="color:var(--text2);">กำลังตรวจสอบ...</p></div>';
+
+  const items = [];
 
   try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(cfg)
-    });
-    toast('บันทึกการตั้งค่าเรียบร้อย');
+    const res = await fetch('/health');
+    const data = await res.json();
+    items.push({ icon: '🔀', name: 'RouterAI Proxy', status: 'ok', badge: 'badge-green', label: 'ปกติ', detail: `ทำงานปกติ` });
   } catch(e) {
-    toast('บันทึกล้มเหลว', 'error');
+    items.push({ icon: '🔀', name: 'RouterAI Proxy', status: 'error', badge: 'badge-red', label: 'ผิดปกติ', detail: 'ไม่สามารถเชื่อมต่อได้' });
+  }
+
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    (data.providers || []).filter(p => p.has_key).forEach(p => {
+      items.push({
+        icon: p.flag || '🌐', name: p.name,
+        status: p.available ? 'ok' : 'warn',
+        badge: p.available ? 'badge-green' : 'badge-yellow',
+        label: p.available ? 'ปกติ' : 'เตือน',
+        detail: p.available ? `${p.models.length} โมเดล พร้อมใช้` : 'มี Key แต่อาจมีปัญหา'
+      });
+    });
+  } catch(e) {}
+
+  el.innerHTML = items.map(i => `
+    <div class="health-item">
+      <div class="health-icon">${i.icon}</div>
+      <div class="health-name">${i.name}</div>
+      <div style="font-size:0.82rem; color:var(--text2); flex:1;">${i.detail}</div>
+      <span class="badge ${i.badge}">${i.label}</span>
+    </div>
+  `).join('');
+}
+
+async function checkAllProviders() {
+  const el = document.getElementById('test-results');
+  el.innerHTML = '<div class="card"><div style="text-align:center;padding:20px;">⏳ กำลังทดสอบทุก Provider...</div></div>';
+
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    const providers = (data.providers || []).filter(p => p.has_key);
+    let results = [];
+
+    for (const p of providers) {
+      try {
+        const testRes = await fetch(`/api/test/${p.id}`, { method: 'POST' });
+        const testData = await testRes.json();
+        results.push({ ...p, ...testData });
+      } catch(e) {
+        results.push({ ...p, success: false, error: e.message });
+      }
+    }
+
+    el.innerHTML = '<div class="card"><h3 style="margin-bottom:12px;">ผลการทดสอบ</h3>' + results.map(r => `
+      <div class="health-item">
+        <div class="health-icon">${r.flag || '🌐'}</div>
+        <div class="health-name">${r.name}</div>
+        <div style="font-size:0.82rem; color:var(--text2); flex:1;">${r.success ? `"${(r.response || '').substring(0, 50)}..." (${r.latency_ms}ms)` : `❌ ${r.error}`}</div>
+        <span class="badge ${r.success ? 'badge-green' : 'badge-red'}">${r.success ? '✅ ปกติ' : '❌ ผิดปกติ'}</span>
+      </div>
+    `).join('') + '</div>';
+  } catch(e) {
+    el.innerHTML = `<div class="card"><div style="color:var(--red);">❌ ทดสอบล้มเหลว: ${e.message}</div></div>`;
   }
 }
 
 async function testProvider(id) {
-  toast(`กำลังทดสอบ ${id}...`);
+  toast(`กำลังทดสอบ ${id}...`, 'info');
   try {
-    const res = await fetch(`/api/test/${id}`, {method: 'POST'});
+    const res = await fetch(`/api/test/${id}`, { method: 'POST' });
     const data = await res.json();
     if (data.success) {
-      toast(`${id}: ✅ ใช้งานได้ (${data.latency_ms}ms) — "${data.response}"`);
+      toast(`${id}: ✅ ใช้ได้ (${data.latency_ms}ms) — "${(data.response || '').substring(0, 60)}"`);
     } else {
       toast(`${id}: ❌ ${data.error}`, 'error');
     }
-  } catch(e) {
-    toast('ทดสอบล้มเหลว: ' + e.message, 'error');
-  }
-}
-
-async function checkHealth() {
-  const container = document.getElementById('health-content');
-  container.innerHTML = '<div class="card" style="text-align:center;padding:40px;"><p style="font-size:2rem;">⏳</p><p style="color:var(--text2);">กำลังตรวจสอบ...</p></div>';
-
-  const checks = [];
-
-  // Check proxy
-  try {
-    const res = await fetch('/health');
-    const data = await res.json();
-    checks.push({name: '🔀 RouterAI Proxy', status: 'ok', detail: `ทำงานปกติ (${data.timestamp})`});
-  } catch(e) {
-    checks.push({name: '🔀 RouterAI Proxy', status: 'error', detail: 'ไม่สามารถเชื่อมต่อได้'});
-  }
-
-  // Check each provider
-  try {
-    const res = await fetch('/api/providers');
-    const data = await res.json();
-    (data.providers || []).forEach(p => {
-      if (p.has_key) {
-        checks.push({
-          name: p.name,
-          status: p.available ? 'ok' : 'warn',
-          detail: p.available
-            ? `${p.models.length} โมเดล พร้อมใช้`
-            : 'มี Key แต่อาจมีปัญหา'
-        });
-      }
-    });
-  } catch(e) {}
-
-  container.innerHTML = checks.map(c => `
-    <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span class="status-dot ${c.status === 'ok' ? 'on' : (c.status === 'warn' ? 'warn' : 'off')}"></span>
-        <strong>${c.name}</strong>
-        <span class="badge ${c.status === 'ok' ? 'badge-green' : (c.status === 'warn' ? 'badge-yellow' : 'badge-red')}">
-          ${c.status === 'ok' ? 'ปกติ' : (c.status === 'warn' ? 'เตือน' : 'ผิดปกติ')}
-        </span>
-      </div>
-      <div style="color:var(--text2);font-size:0.85rem;margin-top:4px;padding-left:20px;">${c.detail}</div>
-    </div>
-  `).join('');
+  } catch(e) { toast('ทดสอบล้มเหลว', 'error'); }
 }
 
 // ── Init ──
