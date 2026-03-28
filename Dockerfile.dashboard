@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir flask flask-cors httpx
+
+COPY src/dashboard.py ./src/dashboard.py
+COPY web/ ./web/
+COPY providers.json .
+
+RUN echo '{}' > /app/api_keys.json
+RUN echo '{}' > /app/proxy_config.json
+
+ENV PYTHONIOENCODING=utf-8
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/src
+ENV DASHBOARD_PORT=8899
+ENV PROXY_URL=http://proxy:8900
+
+EXPOSE 8899
+
+CMD ["python", "src/dashboard.py"]

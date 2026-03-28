@@ -1,0 +1,51 @@
+version: "3.8"
+
+# ============================================
+#  🔀 RouterAI — Free AI Model Router for OpenClaw
+#  docker compose up -d
+# ============================================
+
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routerai-proxy
+    restart: unless-stopped
+    ports:
+      - "8900:8900"
+    volumes:
+      - ./api_keys.json:/app/api_keys.json
+      - ./proxy_config.json:/app/proxy_config.json
+      - ./data:/app/data
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - PYTHONUNBUFFERED=1
+      - ROUTERAI_PORT=8900
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: routerai-dashboard
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    volumes:
+      - ./data:/app/data
+      - ./api_keys.json:/app/api_keys.json
+      - ./web:/app/web:ro
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - PYTHONUNBUFFERED=1
+      - PROXY_URL=http://proxy:8900
+      - DASHBOARD_PORT=8899
+    depends_on:
+      proxy:
+        condition: service_healthy

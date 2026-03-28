@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔀 RouterAI — แผงควบคุม</title>
+<style>
+:root {
+  --bg: #0f0f23;
+  --bg2: #1a1a2e;
+  --bg3: #16213e;
+  --accent: #00d4ff;
+  --accent2: #7c3aed;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --orange: #f97316;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --border: #334155;
+  --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Noto Sans Thai', 'Sarabun', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 260px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+  z-index: 100;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  text-align: center;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.sidebar-logo h1 {
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.sidebar-logo p {
+  font-size: 0.75rem;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+}
+.nav-item:hover, .nav-item.active {
+  background: var(--bg3);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+.nav-item .icon { font-size: 1.2rem; width: 28px; text-align: center; }
+.nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 20px;
+}
+
+/* ── Main ── */
+.main {
+  margin-left: 260px;
+  padding: 24px;
+  min-height: 100vh;
+}
+.page { display: none; }
+.page.active { display: block; }
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Cards ── */
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--accent); }
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.card-title { font-size: 1rem; font-weight: 600; }
+.card-subtitle { font-size: 0.8rem; color: var(--text2); }
+
+/* ── Stats ── */
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+}
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.stat-label { font-size: 0.85rem; color: var(--text2); margin-top: 4px; }
+
+/* ── Provider Cards ── */
+.provider-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.provider-card.available { border-color: var(--green); }
+.provider-card.unavailable { opacity: 0.6; }
+.provider-card .status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.provider-card .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.provider-card .status-dot.off { background: var(--red); }
+.provider-card .status-dot.warn { background: var(--yellow); }
+.provider-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.provider-models {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.model-tag {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  color: var(--text2);
+}
+.model-tag.free { border-color: var(--green); color: var(--green); }
+.provider-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+}
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-secondary {
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--accent); }
+.btn-success { background: var(--green); color: #fff; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.form-input:focus { outline: none; border-color: var(--accent); }
+.form-input::placeholder { color: var(--text2); }
+select.form-input { cursor: pointer; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th, td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th { color: var(--text2); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; }
+tr:hover td { background: var(--bg3); }
+
+/* ── Code Block ── */
+.code-block {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  color: #c9d1d9;
+}
+
+/* ── Badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+.badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+.badge-blue { background: rgba(0,212,255,0.15); color: var(--accent); }
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed;
+  top: 20px; right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 0.85rem;
+  animation: slideIn 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } }
+
+/* ── Modal ── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-close {
+  position: absolute;
+  top: 12px; right: 16px;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .sidebar { width: 60px; }
+  .sidebar .nav-text, .sidebar-logo h1, .sidebar-logo p { display: none; }
+  .nav-item { justify-content: center; padding: 12px; }
+  .main { margin-left: 60px; padding: 16px; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ── Progress Bar ── */
+.progress-bar {
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ── Tab ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 10px 20px;
+  cursor: pointer;
+  color: var(--text2);
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+.tab:hover, .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🔀 RouterAI</h1>
+    <p>รวม AI ฟรี สำหรับ OpenClaw</p>
+  </div>
+  <a class="nav-item active" data-page="dashboard">
+    <span class="icon">📊</span>
+    <span class="nav-text">แดชบอร์ด</span>
+  </a>
+  <a class="nav-item" data-page="providers">
+    <span class="icon">🔌</span>
+    <span class="nav-text">ผู้ให้บริการ</span>
+  </a>
+  <a class="nav-item" data-page="keys">
+    <span class="icon">🔑</span>
+    <span class="nav-text">จัดการ API Key</span>
+  </a>
+  <div class="nav-divider"></div>
+  <a class="nav-item" data-page="openclaw">
+    <span class="icon">🤖</span>
+    <span class="nav-text">เชื่อม OpenClaw</span>
+  </a>
+  <a class="nav-item" data-page="config">
+    <span class="icon">⚙️</span>
+    <span class="nav-text">ตั้งค่า</span>
+  </a>
+  <div class="nav-divider"></div>
+  <a class="nav-item" data-page="install">
+    <span class="icon">📦</span>
+    <span class="nav-text">คู่มือติดตั้ง</span>
+  </a>
+  <a class="nav-item" data-page="health">
+    <span class="icon">🩺</span>
+    <span class="nav-text">ตรวจสอบระบบ</span>
+  </a>
+</nav>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Page: Dashboard -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-title">📊 แดชบอร์ด</div>
+    <div class="grid grid-4" id="stats-grid"></div>
+    <h3 style="margin:24px 0 12px;font-size:1.1rem;">🔌 สถานะผู้ให้บริการ</h3>
+    <div class="grid grid-3" id="providers-overview"></div>
+  </div>
+
+  <!-- Page: Providers -->
+  <div class="page" id="page-providers">
+    <div class="page-title">🔌 ผู้ให้บริการทั้งหมด</div>
+    <div class="grid grid-2" id="providers-full"></div>
+  </div>
+
+  <!-- Page: API Keys -->
+  <div class="page" id="page-keys">
+    <div class="page-title">🔑 จัดการ API Key</div>
+    <div class="card">
+      <p style="color:var(--text2);margin-bottom:16px;">
+        ใส่ API Key อย่างน้อย 1 ตัวเพื่อเริ่มใช้งาน แนะนำเริ่มจาก <strong style="color:var(--green);">Groq</strong> (ฟรี + เร็วที่สุด)
+      </p>
+      <div id="keys-form"></div>
+      <button class="btn btn-primary" onclick="saveKeys()" style="margin-top:16px;">💾 บันทึก API Key</button>
+    </div>
+  </div>
+
+  <!-- Page: OpenClaw -->
+  <div class="page" id="page-openclaw">
+    <div class="page-title">🤖 เชื่อมต่อกับ OpenClaw</div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px;">ขั้นตอนง่ายๆ 3 ขั้นตอน:</h3>
+      <ol style="color:var(--text2);line-height:2;padding-left:20px;">
+        <li>ใส่ API Key อย่างน้อย 1 ตัว (หน้า <strong style="color:var(--accent);">จัดการ API Key</strong>)</li>
+        <li>เลือกผู้ให้บริการและโมเดลด้านล่าง</li>
+        <li>คัดลอก config ไปวางใน OpenClaw แล้วรีสตาร์ท</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:16px;">เลือกผู้ให้บริการและโมเดล</h3>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        <div class="form-group" style="flex:1;min-width:200px;">
+          <label class="form-label">ผู้ให้บริการ</label>
+          <select class="form-input" id="oc-provider" onchange="updateOcModels()"></select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:200px;">
+          <label class="form-label">โมเดล</label>
+          <select class="form-input" id="oc-model"></select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="generateOcConfig()">⚡ สร้าง Config</button>
+    </div>
+
+    <div class="card" id="oc-result" style="margin-top:16px;display:none;">
+      <h3 style="margin-bottom:12px;">📋 Config สำหรับ OpenClaw</h3>
+      <p style="color:var(--text2);margin-bottom:12px;" id="oc-instructions"></p>
+      <div class="code-block" id="oc-code"></div>
+      <button class="btn btn-success" onclick="copyOcConfig()" style="margin-top:12px;">📋 คัดลอก</button>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3 style="margin-bottom:12px;">🔧 วิธีตั้งค่าใน OpenClaw</h3>
+      <div class="code-block"><span style="color:#8b949e"># วิธีที่ 1: ใช้คำสั่ง (แนะนำ)</span>
+openclaw config
+
+<span style="color:#8b949e"># วิธีที่ 2: แก้ไขไฟล์โดยตรง</span>
+nano ~/.openclaw/openclaw.json
+
+<span style="color:#8b949e"># หลังจากแก้ไข config แล้ว:</span>
+openclaw restart</div>
+    </div>
+  </div>
+
+  <!-- Page: Config -->
+  <div class="page" id="page-config">
+    <div class="page-title">⚙️ ตั้งค่าระบบ</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">โหมดการเลือก Provider</label>
+        <select class="form-input" id="cfg-prefer-free">
+          <option value="true">เลือกของฟรีก่อน (แนะนำ)</option>
+          <option value="false">เลือกตามคุณภาพ</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Auto-Failover (สลับอัตโนมัติเมื่อ Error)</label>
+        <select class="form-input" id="cfg-auto-failover">
+          <option value="true">เปิด (แนะนำ)</option>
+          <option value="false">ปิด</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Response Cache (จำคำตอบเดิม)</label>
+        <select class="form-input" id="cfg-cache">
+          <option value="true">เปิด (แนะนำ)</option>
+          <option value="false">ปิด</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cache TTL (วินาที)</label>
+        <input class="form-input" type="number" id="cfg-cache-ttl" value="3600" min="60">
+      </div>
+      <div class="form-group">
+        <label class="form-label">งบประมาณรายวัน (USD, 0 = ไม่จำกัด)</label>
+        <input class="form-input" type="number" id="cfg-budget" value="0" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Timeout (วินาที)</label>
+        <input class="form-input" type="number" id="cfg-timeout" value="60" min="10">
+      </div>
+      <button class="btn btn-primary" onclick="saveConfig()">💾 บันทึกการตั้งค่า</button>
+    </div>
+  </div>
+
+  <!-- Page: Install Guide -->
+  <div class="page" id="page-install">
+    <div class="page-title">📦 คู่มือติดตั้ง</div>
+    <div class="tabs">
+      <div class="tab active" data-tab="install-docker">🐳 Docker (แนะนำ)</div>
+      <div class="tab" data-tab="install-manual">💻 Manual</div>
+    </div>
+
+    <div class="tab-content active" id="tab-install-docker">
+      <div class="card">
+        <h3 style="margin-bottom:12px;">🐳 ติดตั้งด้วย Docker (ง่ายที่สุด)</h3>
+        <p style="color:var(--text2);margin-bottom:16px;">ต้องมี Docker ติดตั้งก่อน</p>
+        <div class="code-block"><span style="color:#8b949e"># 1. ดาวน์โหลด</span>
+git clone https://github.com/tenotony/RouterAI.git
+cd RouterAI
+
+<span style="color:#8b949e"># 2. รันเลย!</span>
+docker compose up -d
+
+<span style="color:#8b949e"># 3. เปิด Dashboard</span>
+<span style="color:#7ee787"># http://localhost:8899</span>
+
+<span style="color:#8b949e"># อัพเดตเมื่อมีโค้ดใหม่:</span>
+bash scripts/update.sh</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-install-manual">
+      <div class="card">
+        <h3 style="margin-bottom:12px;">💻 ติดตั้งด้วยมือ (ไม่ต้องใช้ Docker)</h3>
+        <div class="code-block"><span style="color:#8b949e"># 1. ดาวน์โหลด</span>
+git clone https://github.com/tenotony/RouterAI.git
+cd RouterAI
+
+<span style="color:#8b949e"># 2. สร้าง Virtual Environment</span>
+python3 -m venv venv
+source venv/bin/activate
+
+<span style="color:#8b949e"># 3. ติดตั้ง Dependencies</span>
+pip install -r requirements.txt
+
+<span style="color:#8b949e"># 4. รัน Proxy (Terminal 1)</span>
+python src/proxy.py
+
+<span style="color:#8b949e"># 5. รัน Dashboard (Terminal 2)</span>
+python src/dashboard.py
+
+<span style="color:#8b949e"># 6. เปิด Dashboard</span>
+<span style="color:#7ee787"># http://localhost:8899</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3 style="margin-bottom:12px;">⚡ One-Line Install</h3>
+      <div class="code-block">curl -fsSL https://raw.githubusercontent.com/tenotony/RouterAI/main/scripts/install.sh | bash</div>
+    </div>
+  </div>
+
+  <!-- Page: Health -->
+  <div class="page" id="page-health">
+    <div class="page-title">🩺 ตรวจสอบระบบ</div>
+    <div id="health-content">
+      <div class="card" style="text-align:center;padding:40px;">
+        <p style="font-size:2rem;">⏳</p>
+        <p style="color:var(--text2);">กำลังตรวจสอบ...</p>
+      </div>
+    </div>
+    <button class="btn btn-secondary" onclick="checkHealth()" style="margin-top:16px;">🔄 ตรวจสอบอีกครั้ง</button>
+  </div>
+
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const API = window.location.origin;
+let providersData = [];
+
+// ── Navigation ──
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    const page = item.dataset.page;
+    document.getElementById('page-' + page).classList.add('active');
+    loadPage(page);
+  });
+});
+
+// ── Tab Navigation ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const parent = tab.parentElement;
+    parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const tabId = tab.dataset.tab;
+    parent.parentElement.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+  });
+});
+
+// ── Toast ──
+function toast(msg, type = 'success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = (type === 'success' ? '✅' : '❌') + ' ' + msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// ── Load Pages ──
+function loadPage(page) {
+  switch(page) {
+    case 'dashboard': loadDashboard(); break;
+    case 'providers': loadProviders(); break;
+    case 'keys': loadKeysForm(); break;
+    case 'openclaw': loadOcProviders(); break;
+    case 'config': loadConfig(); break;
+    case 'health': checkHealth(); break;
+  }
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providersData = data.providers || [];
+
+    // Stats
+    const available = providersData.filter(p => p.available).length;
+    const free = providersData.filter(p => p.has_key && p.models.some(m => m.free)).length;
+    const totalModels = providersData.reduce((s, p) => s + p.models.length, 0);
+
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card"><div class="stat-value">${providersData.length}</div><div class="stat-label">ผู้ให้บริการทั้งหมด</div></div>
+      <div class="stat-card"><div class="stat-value">${available}</div><div class="stat-label">พร้อมใช้งาน</div></div>
+      <div class="stat-card"><div class="stat-value">${free}</div><div class="stat-label">มีโมเดลฟรี</div></div>
+      <div class="stat-card"><div class="stat-value">${totalModels}</div><div class="stat-label">โมเดลทั้งหมด</div></div>
+    `;
+
+    // Provider overview
+    document.getElementById('providers-overview').innerHTML = providersData.map(p => {
+      const statusClass = p.available ? 'on' : (p.has_key ? 'warn' : 'off');
+      const cardClass = p.available ? 'available' : 'unavailable';
+      return `
+        <div class="provider-card ${cardClass}">
+          <div class="provider-name">
+            <span class="status-dot ${statusClass}"></span>
+            ${p.name}
+          </div>
+          <div style="margin-top:8px;font-size:0.82rem;color:var(--text2);">
+            ${p.has_key ? '✅ มี API Key' : '❌ ยังไม่ใส่ Key'} ${p.speed}
+          </div>
+          <div class="provider-models">
+            ${p.models.slice(0, 3).map(m => `<span class="model-tag ${m.free ? 'free' : ''}">${m.id}</span>`).join('')}
+            ${p.models.length > 3 ? `<span class="model-tag">+${p.models.length - 3}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    toast('โหลดข้อมูลล้มเหลว: ' + e.message, 'error');
+  }
+}
+
+async function loadProviders() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providersData = data.providers || [];
+
+    document.getElementById('providers-full').innerHTML = providersData.map(p => {
+      const statusClass = p.available ? 'on' : (p.has_key ? 'warn' : 'off');
+      const cardClass = p.available ? 'available' : 'unavailable';
+      return `
+        <div class="provider-card ${cardClass}">
+          <div class="provider-name">
+            <span class="status-dot ${statusClass}"></span>
+            ${p.name}
+            ${p.available ? '<span class="badge badge-green">พร้อมใช้</span>' : '<span class="badge badge-red">ยังไม่ใส่ Key</span>'}
+          </div>
+          <div style="margin-top:8px;font-size:0.82rem;color:var(--text2);">ความเร็ว: ${p.speed}</div>
+          <div class="provider-models">
+            ${p.models.map(m => `<span class="model-tag ${m.free ? 'free' : ''}">${m.id} ${m.free ? '🆓' : '💰'}</span>`).join('')}
+          </div>
+          <div class="provider-actions">
+            <a href="${p.signup_url}" target="_blank" class="btn btn-secondary btn-sm">🔗 สมัคร Key</a>
+            ${p.has_key ? `<button class="btn btn-primary btn-sm" onclick="testProvider('${p.id}')">🧪 ทดสอบ</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    toast('โหลดข้อมูลล้มเหลว', 'error');
+  }
+}
+
+async function loadKeysForm() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providersData = data.providers || [];
+
+    document.getElementById('keys-form').innerHTML = providersData
+      .filter(p => p.id !== 'ollama')
+      .map(p => {
+        const envMap = {
+          groq: 'GROQ_API_KEY', google: 'GOOGLE_API_KEY', cerebras: 'CEREBRAS_API_KEY',
+          openrouter: 'OPENROUTER_API_KEY', mistral: 'MISTRAL_API_KEY', nvidia: 'NVIDIA_API_KEY',
+          deepseek: 'DEEPSEEK_API_KEY', siliconflow: 'SILICONFLOW_API_KEY', together: 'TOGETHER_API_KEY'
+        };
+        const key = envMap[p.id] || p.id.toUpperCase() + '_API_KEY';
+        return `
+          <div class="form-group">
+            <label class="form-label">${p.name} ${p.has_key ? '<span class="badge badge-green">มี Key แล้ว</span>' : ''}</label>
+            <div style="display:flex;gap:8px;">
+              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key ที่นี่..." data-key="${key}">
+              <a href="${p.signup_url}" target="_blank" class="btn btn-secondary">สมัคร</a>
+            </div>
+            <div style="font-size:0.75rem;color:var(--text2);margin-top:4px;">Models: ${p.models.map(m => m.id).join(', ')}</div>
+          </div>
+        `;
+      }).join('');
+  } catch(e) {
+    toast('โหลดฟอร์มล้มเหลว', 'error');
+  }
+}
+
+async function saveKeys() {
+  const keys = {};
+  document.querySelectorAll('#keys-form input[type="password"]').forEach(input => {
+    const val = input.value.trim();
+    if (val) keys[input.dataset.key] = val;
+  });
+
+  if (Object.keys(keys).length === 0) {
+    toast('กรุณาใส่ API Key อย่างน้อย 1 ตัว', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(keys)
+    });
+    const data = await res.json();
+    toast(data.message || 'บันทึกสำเร็จ');
+    loadKeysForm();
+  } catch(e) {
+    toast('บันทึกล้มเหลว: ' + e.message, 'error');
+  }
+}
+
+async function loadOcProviders() {
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    providersData = data.providers || [];
+
+    const select = document.getElementById('oc-provider');
+    select.innerHTML = providersData
+      .filter(p => p.available)
+      .map(p => `<option value="${p.id}">${p.name}</option>`)
+      .join('');
+
+    updateOcModels();
+  } catch(e) {
+    toast('โหลดข้อมูลล้มเหลว', 'error');
+  }
+}
+
+function updateOcModels() {
+  const providerId = document.getElementById('oc-provider').value;
+  const provider = providersData.find(p => p.id === providerId);
+  if (!provider) return;
+
+  const select = document.getElementById('oc-model');
+  select.innerHTML = provider.models.map(m =>
+    `<option value="${m.id}">${m.id} ${m.free ? '🆓 (ฟรี)' : '💰'}</option>`
+  ).join('');
+}
+
+async function generateOcConfig() {
+  const providerId = document.getElementById('oc-provider').value;
+  const modelId = document.getElementById('oc-model').value;
+
+  try {
+    const res = await fetch('/api/openclaw-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({provider: providerId, model: modelId})
+    });
+    const data = await res.json();
+
+    document.getElementById('oc-result').style.display = 'block';
+    document.getElementById('oc-instructions').textContent = data.instructions;
+    document.getElementById('oc-code').textContent = JSON.stringify(data.config, null, 2);
+  } catch(e) {
+    toast('สร้าง config ล้มเหลว', 'error');
+  }
+}
+
+function copyOcConfig() {
+  const code = document.getElementById('oc-code').textContent;
+  navigator.clipboard.writeText(code).then(() => toast('คัดลอกแล้ว! 📋'));
+}
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    document.getElementById('cfg-prefer-free').value = String(cfg.prefer_free ?? true);
+    document.getElementById('cfg-auto-failover').value = String(cfg.auto_failover ?? true);
+    document.getElementById('cfg-cache').value = String(cfg.cache_enabled ?? true);
+    document.getElementById('cfg-cache-ttl').value = cfg.cache_ttl ?? 3600;
+    document.getElementById('cfg-budget').value = cfg.budget_daily_usd ?? 0;
+    document.getElementById('cfg-timeout').value = cfg.timeout ?? 60;
+  } catch(e) {
+    toast('โหลดการตั้งค่าล้มเหลว', 'error');
+  }
+}
+
+async function saveConfig() {
+  const cfg = {
+    prefer_free: document.getElementById('cfg-prefer-free').value === 'true',
+    auto_failover: document.getElementById('cfg-auto-failover').value === 'true',
+    cache_enabled: document.getElementById('cfg-cache').value === 'true',
+    cache_ttl: parseInt(document.getElementById('cfg-cache-ttl').value),
+    budget_daily_usd: parseFloat(document.getElementById('cfg-budget').value),
+    timeout: parseInt(document.getElementById('cfg-timeout').value)
+  };
+
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg)
+    });
+    toast('บันทึกการตั้งค่าเรียบร้อย');
+  } catch(e) {
+    toast('บันทึกล้มเหลว', 'error');
+  }
+}
+
+async function testProvider(id) {
+  toast(`กำลังทดสอบ ${id}...`);
+  try {
+    const res = await fetch(`/api/test/${id}`, {method: 'POST'});
+    const data = await res.json();
+    if (data.success) {
+      toast(`${id}: ✅ ใช้งานได้ (${data.latency_ms}ms) — "${data.response}"`);
+    } else {
+      toast(`${id}: ❌ ${data.error}`, 'error');
+    }
+  } catch(e) {
+    toast('ทดสอบล้มเหลว: ' + e.message, 'error');
+  }
+}
+
+async function checkHealth() {
+  const container = document.getElementById('health-content');
+  container.innerHTML = '<div class="card" style="text-align:center;padding:40px;"><p style="font-size:2rem;">⏳</p><p style="color:var(--text2);">กำลังตรวจสอบ...</p></div>';
+
+  const checks = [];
+
+  // Check proxy
+  try {
+    const res = await fetch('/health');
+    const data = await res.json();
+    checks.push({name: '🔀 RouterAI Proxy', status: 'ok', detail: `ทำงานปกติ (${data.timestamp})`});
+  } catch(e) {
+    checks.push({name: '🔀 RouterAI Proxy', status: 'error', detail: 'ไม่สามารถเชื่อมต่อได้'});
+  }
+
+  // Check each provider
+  try {
+    const res = await fetch('/api/providers');
+    const data = await res.json();
+    (data.providers || []).forEach(p => {
+      if (p.has_key) {
+        checks.push({
+          name: p.name,
+          status: p.available ? 'ok' : 'warn',
+          detail: p.available
+            ? `${p.models.length} โมเดล พร้อมใช้`
+            : 'มี Key แต่อาจมีปัญหา'
+        });
+      }
+    });
+  } catch(e) {}
+
+  container.innerHTML = checks.map(c => `
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="status-dot ${c.status === 'ok' ? 'on' : (c.status === 'warn' ? 'warn' : 'off')}"></span>
+        <strong>${c.name}</strong>
+        <span class="badge ${c.status === 'ok' ? 'badge-green' : (c.status === 'warn' ? 'badge-yellow' : 'badge-red')}">
+          ${c.status === 'ok' ? 'ปกติ' : (c.status === 'warn' ? 'เตือน' : 'ผิดปกติ')}
+        </span>
+      </div>
+      <div style="color:var(--text2);font-size:0.85rem;margin-top:4px;padding-left:20px;">${c.detail}</div>
+    </div>
+  `).join('');
+}
+
+// ── Init ──
+loadDashboard();
+</script>
+</body>
+</html>

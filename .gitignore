@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+data/
+api_keys.json
+proxy_config.json
+*.log
+.DS_Store
