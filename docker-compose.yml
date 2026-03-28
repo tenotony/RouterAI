@@ -15,9 +15,8 @@ services:
     ports:
       - "8900:8900"
     volumes:
-      - ./api_keys.json:/app/api_keys.json
-      - ./proxy_config.json:/app/proxy_config.json
-      - ./data:/app/data
+      - routerai-data:/app/data
+      - routerai-config:/app/config
     environment:
       - PYTHONIOENCODING=utf-8
       - PYTHONUNBUFFERED=1
@@ -38,8 +37,8 @@ services:
     ports:
       - "8899:8899"
     volumes:
-      - ./data:/app/data
-      - ./api_keys.json:/app/api_keys.json
+      - routerai-data:/app/data:ro
+      - routerai-config:/app/config
       - ./web:/app/web:ro
     environment:
       - PYTHONIOENCODING=utf-8
@@ -49,3 +48,7 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
+
+volumes:
+  routerai-data:
+  routerai-config:

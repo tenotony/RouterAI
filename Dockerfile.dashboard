@@ -17,6 +17,10 @@ ENV PYTHONPATH=/app/src
 ENV DASHBOARD_PORT=8899
 ENV PROXY_URL=http://proxy:8900
 
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8899
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "src/dashboard.py"]
