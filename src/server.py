@@ -11,23 +11,23 @@ Single server on one port:
 
 Built with FastAPI + SQLite for production performance.
 """
-import os
-import json
-import time
 import hashlib
+import json
 import logging
+import os
+import secrets
 import sqlite3
 import threading
-import secrets
-from pathlib import Path
+import time
 from collections import defaultdict
-from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # ── Config ──────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
@@ -55,7 +55,7 @@ def load_json_file(path: Path, default=None):
     """Safely load a JSON file with fallback."""
     if path.exists():
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             log.error(f"Failed to load {path}: {e}")
@@ -423,7 +423,7 @@ class ProviderManager:
         self._reload_keys_from_env()
 
     def _reload_keys_from_env(self):
-        for pid, provider in self.providers.items():
+        for _pid, provider in self.providers.items():
             env_key = provider.get("api_key_env")
             if env_key and env_key not in self.api_keys:
                 val = os.environ.get(env_key)
@@ -547,7 +547,7 @@ class ResponseCache:
             age = time.time() - path.stat().st_mtime
             if age < self._ttl:
                 try:
-                    with open(path, "r") as f:
+                    with open(path) as f:
                         result = json.load(f)
                     self._hits += 1
                     return result
@@ -1024,7 +1024,7 @@ async def embeddings(request: Request):
 
     # Try providers that support embeddings
     tried = set()
-    for attempt in range(3):
+    for _attempt in range(3):
         provider, model = manager.resolve_model(requested_model)
         if not provider:
             break
@@ -1286,7 +1286,7 @@ async def api_masked_keys():
     """Return masked API keys for safe display in Dashboard."""
     masked = key_store.get_masked_keys()
     env_masked = {}
-    for pid, provider in manager.providers.items():
+    for _pid, provider in manager.providers.items():
         env_key = provider.get("api_key_env")
         if env_key:
             # Check env var too
