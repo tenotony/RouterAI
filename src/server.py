@@ -1038,6 +1038,176 @@ async def api_compare_models(request: Request):
     return {"results": results}
 
 
+# ── Search Free Providers ───────────────────────────
+@app.get("/api/search-free-providers")
+async def api_search_free_providers(q: str = ""):
+    """Search for free AI providers/models from OpenRouter + curated list."""
+    results = []
+
+    # Curated free providers list (always available)
+    curated = [
+        {"provider": "Groq", "model": "llama-3.3-70b-versatile", "free": True, "context": 131072, "speed": "เร็วมาก", "category": "chat", "signup": "https://console.groq.com/keys", "flag": "🇺🇸"},
+        {"provider": "Groq", "model": "llama-3.1-8b-instant", "free": True, "context": 131072, "speed": "เร็วสุดๆ", "category": "chat", "signup": "https://console.groq.com/keys", "flag": "🇺🇸"},
+        {"provider": "Groq", "model": "gemma2-9b-it", "free": True, "context": 8192, "speed": "เร็ว", "category": "chat", "signup": "https://console.groq.com/keys", "flag": "🇺🇸"},
+        {"provider": "Cerebras", "model": "llama3.1-70b", "free": True, "context": 8192, "speed": "เร็วมาก", "category": "chat", "signup": "https://cloud.cerebras.ai", "flag": "🇺🇸"},
+        {"provider": "Cerebras", "model": "llama3.1-8b", "free": True, "context": 8192, "speed": "เร็วสุดๆ", "category": "chat", "signup": "https://cloud.cerebras.ai", "flag": "🇺🇸"},
+        {"provider": "Google Gemini", "model": "gemini-2.0-flash", "free": True, "context": 1048576, "speed": "เร็ว", "category": "vision", "signup": "https://aistudio.google.com/apikey", "flag": "🇺🇸"},
+        {"provider": "Google Gemini", "model": "gemini-1.5-flash", "free": True, "context": 1048576, "speed": "เร็ว", "category": "vision", "signup": "https://aistudio.google.com/apikey", "flag": "🇺🇸"},
+        {"provider": "Mistral", "model": "mistral-small-latest", "free": True, "context": 32768, "speed": "ปานกลาง", "category": "chat", "signup": "https://console.mistral.ai/api-keys/", "flag": "🇫🇷"},
+        {"provider": "NVIDIA", "model": "llama-3.1-70b-instruct", "free": True, "context": 131072, "speed": "เร็ว", "category": "chat", "signup": "https://build.nvidia.com/explore/discover", "flag": "🇺🇸"},
+        {"provider": "SiliconFlow", "model": "Qwen2.5-72B-Instruct", "free": True, "context": 32768, "speed": "ปานกลาง", "category": "chat", "signup": "https://cloud.siliconflow.cn", "flag": "🇨🇳"},
+        {"provider": "SiliconFlow", "model": "DeepSeek-V2.5", "free": True, "context": 65536, "speed": "ปานกลาง", "category": "code", "signup": "https://cloud.siliconflow.cn", "flag": "🇨🇳"},
+        {"provider": "OpenRouter", "model": "llama-3.1-8b-instruct:free", "free": True, "context": 131072, "speed": "ปานกลาง", "category": "chat", "signup": "https://openrouter.ai/settings/keys", "flag": "🌍"},
+        {"provider": "OpenRouter", "model": "gemma-2-9b-it:free", "free": True, "context": 8192, "speed": "ปานกลาง", "category": "chat", "signup": "https://openrouter.ai/settings/keys", "flag": "🌍"},
+        {"provider": "Chutes AI", "model": "llama-3.1-70b-instruct", "free": True, "context": 131072, "speed": "ปานกลาง", "category": "chat", "signup": "https://chutes.ai", "flag": "🌍"},
+        {"provider": "Together AI", "model": "Llama-3.3-70B (ทดลอง)", "free": False, "context": 131072, "speed": "ปานกลาง", "category": "chat", "signup": "https://api.together.xyz/settings/api-keys", "flag": "🇺🇸", "note": "$5 เครดิตฟรี"},
+        {"provider": "Ollama (Local)", "model": "llama3.1", "free": True, "context": 131072, "speed": "เร็ว (local)", "category": "chat", "signup": "https://ollama.com", "flag": "🏠"},
+    ]
+
+    # Also try to fetch from OpenRouter
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://openrouter.ai/api/v1/models")
+            if resp.status_code == 200:
+                or_models = resp.json().get("data", [])
+                for m in or_models:
+                    mid = m.get("id", "")
+                    pricing = m.get("pricing", {})
+                    prompt_price = float(pricing.get("prompt", "1"))
+                    is_free = prompt_price == 0 or ":free" in mid
+                    if is_free:
+                        results.append({
+                            "provider": "OpenRouter",
+                            "model": mid,
+                            "free": True,
+                            "context": m.get("context_length", 0),
+                            "speed": "—",
+                            "category": "openrouter",
+                            "signup": "https://openrouter.ai/settings/keys",
+                            "flag": "🌍",
+                            "description": m.get("name", ""),
+                        })
+    except Exception:
+        pass  # Silently fail, curated list is enough
+
+    # Filter by search query
+    if q:
+        q_lower = q.lower()
+        curated = [r for r in curated if q_lower in r["model"].lower() or q_lower in r["provider"].lower() or q_lower in r.get("category", "").lower()]
+        results = [r for r in results if q_lower in r["model"].lower() or q_lower in r["provider"].lower()]
+
+    # Merge: curated first, then OpenRouter
+    all_results = curated + results[:50]  # Limit OpenRouter results
+
+    return {"total": len(all_results), "results": all_results}
+
+
+# ── Analytics ───────────────────────────────────────
+@app.get("/api/analytics")
+async def api_analytics(days: int = 7):
+    """Detailed usage analytics with daily breakdown."""
+    summary = manager.stats.get_summary(days=days)
+
+    # Provider breakdown from current config
+    provider_stats = []
+    for pid, pdata in manager.providers.items():
+        key = manager.get_api_key(pid)
+        models = pdata.get("models", [])
+        free_count = sum(1 for m in models if m.get("free", False))
+        provider_stats.append({
+            "id": pid,
+            "name": pdata.get("name", pid),
+            "flag": pdata.get("flag", ""),
+            "has_key": bool(key),
+            "total_models": len(models),
+            "free_models": free_count,
+            "paid_models": len(models) - free_count,
+            "speed": pdata.get("speed", ""),
+            "signup_url": pdata.get("signup_url", ""),
+        })
+
+    # Token estimate (rough)
+    total_tokens = summary.get("total_tokens_in", 0) + summary.get("total_tokens_out", 0)
+
+    return {
+        "period_days": days,
+        "summary": {
+            "total_requests": summary.get("total_requests", 0),
+            "successful_requests": summary.get("successful_requests", 0),
+            "failed_requests": summary.get("failed_requests", 0),
+            "success_rate": round(summary.get("success_rate", 0), 1),
+            "total_tokens_in": summary.get("total_tokens_in", 0),
+            "total_tokens_out": summary.get("total_tokens_out", 0),
+            "total_tokens": total_tokens,
+            "avg_latency_ms": round(summary.get("avg_latency_ms", 0)),
+            "providers_available": len(manager.get_available_providers()),
+            "providers_total": len(manager.providers),
+        },
+        "daily": summary.get("daily", []),
+        "providers": provider_stats,
+        "cache": manager.cache.get_stats() if manager.cache.enabled else {"enabled": False},
+    }
+
+
+# ── Chat Playground ─────────────────────────────────
+@app.post("/api/playground/chat")
+async def api_playground_chat(request: Request):
+    """Chat playground — sends a message to a specific provider/model."""
+    data = await request.json()
+    provider_id = data.get("provider", "")
+    model_id = data.get("model", "")
+    message = data.get("message", "")
+    system_prompt = data.get("system_prompt", "")
+
+    if not message:
+        return JSONResponse(status_code=400, content={"error": "กรุณาใส่ข้อความ"})
+
+    provider = manager.providers.get(provider_id)
+    if not provider:
+        return JSONResponse(status_code=404, content={"error": f"ไม่พบ provider: {provider_id}"})
+
+    api_key = manager.get_api_key(provider_id)
+    if not api_key and provider.get("api_key_env"):
+        return JSONResponse(status_code=400, content={"error": f"ไม่พบ API Key สำหรับ {provider.get('name', provider_id)}"})
+
+    # Find model
+    model = None
+    for m in provider.get("models", []):
+        if m["id"] == model_id:
+            model = m
+            break
+    if not model:
+        model = provider["models"][0] if provider.get("models") else {"id": model_id}
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": message})
+
+    try:
+        start = time.time()
+        result = _make_request(provider, model, {"messages": messages, "max_tokens": 1024}, api_key)
+        latency = int((time.time() - start) * 1000)
+
+        if "error" in result:
+            return {"success": False, "error": result["error"], "latency_ms": latency}
+
+        choice = result.get("choices", [{}])[0]
+        content = choice.get("message", {}).get("content", "")
+        usage = result.get("usage", {})
+
+        return {
+            "success": True,
+            "response": content,
+            "model": model["id"],
+            "provider": provider_id,
+            "latency_ms": latency,
+            "usage": usage,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e), "latency_ms": 0}
+
+
 # ── Health Check ────────────────────────────────────
 @app.get("/health")
 async def health():

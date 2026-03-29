@@ -713,10 +713,16 @@ select.form-input { cursor: pointer; }
       <span class="nav-icon">🔌</span><span class="nav-text">ผู้ให้บริการ</span>
       <span class="nav-badge" id="badge-providers">0</span>
     </a>
+    <a class="nav-item" data-page="search">
+      <span class="nav-icon">🔍</span><span class="nav-text">ค้นหา API ฟรี</span>
+    </a>
     <a class="nav-item" data-page="keys">
       <span class="nav-icon">🔑</span><span class="nav-text">จัดการ API Key</span>
     </a>
     <div class="nav-section">เชื่อมต่อ</div>
+    <a class="nav-item" data-page="playground">
+      <span class="nav-icon">💬</span><span class="nav-text">ทดลองแชต</span>
+    </a>
     <a class="nav-item" data-page="openclaw">
       <span class="nav-icon">🤖</span><span class="nav-text">เชื่อม OpenClaw</span>
     </a>
@@ -724,6 +730,9 @@ select.form-input { cursor: pointer; }
       <span class="nav-icon">🧠</span><span class="nav-text">เลือกโมเดล</span>
     </a>
     <div class="nav-section">ระบบ</div>
+    <a class="nav-item" data-page="analytics">
+      <span class="nav-icon">📈</span><span class="nav-text">วิเคราะห์การใช้งาน</span>
+    </a>
     <a class="nav-item" data-page="config">
       <span class="nav-icon">⚙️</span><span class="nav-text">ตั้งค่า</span>
     </a>
@@ -1021,14 +1030,10 @@ select.form-input { cursor: pointer; }
 <span class="comment"># 3. ติดตั้ง Dependencies</span>
 <span class="cmd">pip install -r requirements.txt</span>
 
-<span class="comment"># 4. รัน Proxy (Terminal 1)</span>
-<span class="cmd">python src/proxy.py</span>
+<span class="comment"># 4. รัน Server</span>
+<span class="cmd">python src/server.py</span>
 
-<span class="comment"># 5. รัน Dashboard (Terminal 2)</span>
-<span class="cmd">python src/dashboard.py</span>
-
-<span class="comment"># Dashboard: </span><span class="ok">http://localhost:8899</span>
-<span class="comment"># API Proxy: </span><span class="ok">http://localhost:8900</span></div>
+<span class="comment"># Dashboard + API: </span><span class="ok">http://localhost:8900</span></div>
     </div>
 
     <div class="card">
@@ -1055,6 +1060,111 @@ select.form-input { cursor: pointer; }
           <div style="font-size:0.75rem; color:var(--text2);">ARM64</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══ Page: ค้นหา API ฟรี ═══ -->
+  <div class="page" id="page-search">
+    <div class="page-header">
+      <div class="page-title">🔍 ค้นหา API ฟรี</div>
+      <div class="page-subtitle">ค้นหา AI API ฟรีจากทั่วโลก — กดค้นหาเพื่ออัพเดตข้อมูลล่าสุด</div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex; gap:12px; align-items:end;">
+        <div style="flex:1;">
+          <label class="form-label">ค้นหาโมเดล / ผู้ให้บริการ / ประเภท</label>
+          <input class="form-input" id="search-input" placeholder="เช่น llama, vision, code, gemini..." onkeydown="if(event.key==='Enter')searchProviders()">
+        </div>
+        <button class="btn btn-primary" onclick="searchProviders()" id="search-btn" style="white-space:nowrap; height:42px;">
+          🔍 ค้นหา
+        </button>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" style="font-size:0.75rem; padding:4px 12px;" onclick="document.getElementById('search-input').value='free';searchProviders()">🆓 ฟรีทั้งหมด</button>
+        <button class="btn btn-ghost" style="font-size:0.75rem; padding:4px 12px;" onclick="document.getElementById('search-input').value='vision';searchProviders()">👁️ Vision</button>
+        <button class="btn btn-ghost" style="font-size:0.75rem; padding:4px 12px;" onclick="document.getElementById('search-input').value='code';searchProviders()">💻 Code</button>
+        <button class="btn btn-ghost" style="font-size:0.75rem; padding:4px 12px;" onclick="document.getElementById('search-input').value='chat';searchProviders()">💬 Chat</button>
+        <button class="btn btn-ghost" style="font-size:0.75rem; padding:4px 12px;" onclick="document.getElementById('search-input').value='';searchProviders()">📋 แสดงทั้งหมด</button>
+      </div>
+    </div>
+
+    <div id="search-results" style="display:grid; gap:12px;"></div>
+    <div id="search-empty" style="display:none; text-align:center; padding:60px 20px;">
+      <div style="font-size:3rem; margin-bottom:12px;">🔍</div>
+      <div style="color:var(--text2); font-size:0.95rem;">กดปุ่ม "ค้นหา" เพื่อดูรายชื่อ API ฟรีทั้งหมด</div>
+    </div>
+  </div>
+
+  <!-- ═══ Page: ทดลองแชต ═══ -->
+  <div class="page" id="page-playground">
+    <div class="page-header">
+      <div class="page-title">💬 ทดลองแชต</div>
+      <div class="page-subtitle">ทดสอบโมเดล AI แบบสดๆ — เปรียบเทียบคำตอบจากหลาย provider</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end;">
+        <div>
+          <label class="form-label">ผู้ให้บริการ</label>
+          <select class="form-input" id="pg-provider" onchange="updatePgModels()"></select>
+        </div>
+        <div>
+          <label class="form-label">โมเดล</label>
+          <select class="form-input" id="pg-model"></select>
+        </div>
+        <button class="btn btn-ghost" onclick="clearChat()" style="height:42px;">🗑️ ล้าง</button>
+      </div>
+      <div style="margin-top:10px;">
+        <label class="form-label">System Prompt (ไม่บังคับ)</label>
+        <input class="form-input" id="pg-system" placeholder="เช่น คุณเป็นผู้ช่วยที่เป็นมิตร พูดภาษาไทย">
+      </div>
+    </div>
+
+    <div class="card" style="height:400px; display:flex; flex-direction:column; margin-bottom:12px;">
+      <div id="chat-messages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;">
+        <div style="text-align:center; color:var(--text3); padding:40px;">
+          <div style="font-size:2.5rem; margin-bottom:8px;">💬</div>
+          ส่งข้อความเพื่อเริ่มทดสอบ
+        </div>
+      </div>
+      <div style="padding:12px 16px; border-top:1px solid var(--border); display:flex; gap:10px;">
+        <input class="form-input" id="chat-input" placeholder="พิมพ์ข้อความ..." style="flex:1;" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary" onclick="sendChat()" id="chat-send" style="white-space:nowrap;">ส่ง ⚡</button>
+      </div>
+    </div>
+
+    <div id="chat-stats" style="font-size:0.75rem; color:var(--text3); text-align:center;"></div>
+  </div>
+
+  <!-- ═══ Page: วิเคราะห์การใช้งาน ═══ -->
+  <div class="page" id="page-analytics">
+    <div class="page-header">
+      <div class="page-title">📈 วิเคราะห์การใช้งาน</div>
+      <div class="page-subtitle">ดูสถิติการใช้งาน, token consumption, และค่าใช้จ่ายโดยประมาณ</div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:20px;">
+      <button class="btn btn-ghost analytics-period active" data-days="1" onclick="loadAnalytics(1,this)">วันนี้</button>
+      <button class="btn btn-ghost analytics-period" data-days="7" onclick="loadAnalytics(7,this)">7 วัน</button>
+      <button class="btn btn-ghost analytics-period" data-days="30" onclick="loadAnalytics(30,this)">30 วัน</button>
+    </div>
+
+    <div class="stats-row" id="analytics-stats"></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:16px;">📊 การใช้งานรายวัน</h3>
+      <div id="analytics-chart" style="min-height:200px;"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:16px;">🔌 สถานะผู้ให้บริการ</h3>
+      <div id="analytics-providers"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:16px;">💰 ค่าใช้จ่ายโดยประมาณ</h3>
+      <div id="analytics-cost" style="color:var(--text2); font-size:0.85rem;"></div>
     </div>
   </div>
 
@@ -1136,6 +1246,13 @@ async function loadDashboard() {
       `<option value="${p.id}">${p.flag || '🌐'} ${p.name}</option>`
     ).join('');
     updateQsModels();
+
+    // Playground provider dropdown (all providers, not just ones with keys)
+    const pgSelect = document.getElementById('pg-provider');
+    pgSelect.innerHTML = providersData.map(p =>
+      `<option value="${p.id}">${p.flag || '🌐'} ${p.name}</option>`
+    ).join('');
+    updatePgModels();
 
     // Provider overview
     document.getElementById('providers-overview').innerHTML = providersData.map(p => {
@@ -1548,6 +1665,246 @@ async function testProvider(id) {
       toast(`${id}: ❌ ${data.error}`, 'error');
     }
   } catch(e) { toast('ทดสอบล้มเหลว', 'error'); }
+}
+
+// ── Search Free Providers ──
+let searchCache = null;
+async function searchProviders() {
+  const q = document.getElementById('search-input').value.trim();
+  const container = document.getElementById('search-results');
+  const btn = document.getElementById('search-btn');
+  btn.textContent = '⏳ กำลังค้นหา...';
+  btn.disabled = true;
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2);">⏳ กำลังโหลดข้อมูลจาก OpenRouter + curated list...</div>';
+
+  try {
+    const res = await fetch(`/api/search-free-providers?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    searchCache = data.results || [];
+
+    if (searchCache.length === 0) {
+      container.innerHTML = '';
+      document.getElementById('search-empty').style.display = 'block';
+      document.getElementById('search-empty').querySelector('div:last-child').textContent = 'ไม่พบผลลัพธ์สำหรับ "' + q + '"';
+    } else {
+      document.getElementById('search-empty').style.display = 'none';
+      // Group by provider
+      const grouped = {};
+      searchCache.forEach(r => {
+        if (!grouped[r.provider]) grouped[r.provider] = [];
+        grouped[r.provider].push(r);
+      });
+
+      let html = `<div style="margin-bottom:12px;color:var(--text2);font-size:0.85rem;">พบ ${data.total} ผลลัพธ์</div>`;
+      for (const [provider, models] of Object.entries(grouped)) {
+        const flag = models[0]?.flag || '🌐';
+        const signup = models[0]?.signup || '#';
+        html += `<div class="card" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.5rem;">${flag}</span>
+              <div>
+                <div style="font-weight:700;font-size:1rem;">${provider}</div>
+                <div style="font-size:0.75rem;color:var(--text3);">${models.length} โมเดล</div>
+              </div>
+            </div>
+            <a href="${signup}" target="_blank" class="btn btn-ghost" style="font-size:0.75rem;padding:4px 12px;">สมัคร →</a>
+          </div>
+          <div style="display:grid;gap:6px;">`;
+        models.forEach(m => {
+          const ctx = m.context ? (m.context >= 1000000 ? (m.context/1000000).toFixed(0)+'M' : (m.context/1000).toFixed(0)+'K') : '—';
+          html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border-radius:8px;">
+            <span style="flex:1;font-family:monospace;font-size:0.82rem;">${m.model}</span>
+            <span style="font-size:0.7rem;color:var(--green);background:var(--green-glow);padding:2px 8px;border-radius:6px;">${m.free ? '🆓 ฟรี' : '💳 จ่าย'}</span>
+            <span style="font-size:0.7rem;color:var(--text3);">${ctx} ctx</span>
+            <span style="font-size:0.7rem;color:var(--text3);">${m.speed || ''}</span>
+          </div>`;
+        });
+        html += '</div></div>';
+      }
+      container.innerHTML = html;
+    }
+  } catch(e) {
+    container.innerHTML = `<div class="card" style="color:var(--red);">❌ ค้นหาล้มเหลว: ${e.message}</div>`;
+  }
+  btn.textContent = '🔍 ค้นหา';
+  btn.disabled = false;
+}
+
+// ── Chat Playground ──
+function updatePgModels() {
+  const sel = document.getElementById('pg-provider');
+  const pid = sel.value;
+  const provider = providersData.find(p => p.id === pid);
+  const modelSel = document.getElementById('pg-model');
+  modelSel.innerHTML = '';
+  if (provider) {
+    provider.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.id + (m.free ? ' 🆓' : '');
+      modelSel.appendChild(opt);
+    });
+  }
+}
+
+function clearChat() {
+  document.getElementById('chat-messages').innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;"><div style="font-size:2.5rem;margin-bottom:8px;">💬</div>ส่งข้อความเพื่อเริ่มทดสอบ</div>';
+  document.getElementById('chat-stats').textContent = '';
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const provider = document.getElementById('pg-provider').value;
+  const model = document.getElementById('pg-model').value;
+  const systemPrompt = document.getElementById('pg-system').value;
+  const container = document.getElementById('chat-messages');
+  const btn = document.getElementById('chat-send');
+
+  // Clear initial message
+  if (container.querySelector('[style*="text-align:center"]')) container.innerHTML = '';
+
+  // Add user message
+  container.innerHTML += `<div style="display:flex;justify-content:flex-end;"><div style="background:var(--accent);color:#fff;padding:10px 16px;border-radius:12px 12px 4px 12px;max-width:70%;font-size:0.9rem;">${escHtml(msg)}</div></div>`;
+
+  input.value = '';
+  btn.textContent = '⏳...';
+  btn.disabled = true;
+  container.scrollTop = container.scrollHeight;
+
+  // Add thinking indicator
+  container.innerHTML += `<div id="chat-thinking" style="color:var(--text3);font-size:0.85rem;">⏳ กำลังคิด...</div>`;
+  container.scrollTop = container.scrollHeight;
+
+  try {
+    const res = await fetch('/api/playground/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({provider, model, message: msg, system_prompt: systemPrompt})
+    });
+    const data = await res.json();
+    document.getElementById('chat-thinking')?.remove();
+
+    if (data.success) {
+      container.innerHTML += `<div style="display:flex;justify-content:flex-start;"><div style="background:var(--bg3);padding:10px 16px;border-radius:12px 12px 12px 4px;max-width:70%;font-size:0.9rem;white-space:pre-wrap;">${escHtml(data.response)}</div></div>`;
+      const usage = data.usage || {};
+      document.getElementById('chat-stats').textContent = `${data.provider}/${data.model} · ${data.latency_ms}ms · ${usage.prompt_tokens || '?'} in / ${usage.completion_tokens || '?'} out tokens`;
+    } else {
+      container.innerHTML += `<div style="color:var(--red);font-size:0.85rem;">❌ ${escHtml(data.error)}</div>`;
+    }
+  } catch(e) {
+    document.getElementById('chat-thinking')?.remove();
+    container.innerHTML += `<div style="color:var(--red);font-size:0.85rem;">❌ ${e.message}</div>`;
+  }
+  btn.textContent = 'ส่ง ⚡';
+  btn.disabled = false;
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Analytics ──
+async function loadAnalytics(days, clickedBtn) {
+  // Update active button
+  document.querySelectorAll('.analytics-period').forEach(b => b.classList.remove('active'));
+  if (clickedBtn) clickedBtn.classList.add('active');
+
+  try {
+    const res = await fetch(`/api/analytics?days=${days}`);
+    const data = await res.json();
+    const s = data.summary || {};
+
+    // Stats cards
+    document.getElementById('analytics-stats').innerHTML = statCard('📨', 'คำขอทั้งหมด', s.total_requests || 0, '') +
+      statCard('✅', 'สำเร็จ', s.successful_requests || 0, `${s.success_rate || 0}%`) +
+      statCard('❌', 'ล้มเหลว', s.failed_requests || 0, '') +
+      statCard('🔤', 'Tokens รวม', fmtNum(s.total_tokens || 0), `${fmtNum(s.total_tokens_in || 0)} in + ${fmtNum(s.total_tokens_out || 0)} out`) +
+      statCard('⚡', 'Latency เฉลี่ย', (s.avg_latency_ms || 0) + 'ms', '') +
+      statCard('🔌', 'Providers', `${s.providers_available || 0}/${s.providers_total || 0}`, 'พร้อมใช้');
+
+    // Daily chart
+    const daily = data.daily || [];
+    const chartEl = document.getElementById('analytics-chart');
+    if (daily.length > 0) {
+      const maxReq = Math.max(...daily.map(d => d.requests || 0), 1);
+      let chartHtml = '<div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px;">';
+      daily.forEach(d => {
+        const h = Math.max(4, ((d.requests || 0) / maxReq) * 140);
+        const dateLabel = (d.date || '').substring(5);
+        chartHtml += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="font-size:0.65rem;color:var(--text3);">${d.requests || 0}</div>
+          <div style="width:100%;height:${h}px;background:linear-gradient(180deg,var(--accent),var(--accent-light));border-radius:4px 4px 0 0;min-height:4px;"></div>
+          <div style="font-size:0.65rem;color:var(--text3);">${dateLabel}</div>
+        </div>`;
+      });
+      chartHtml += '</div>';
+      chartEl.innerHTML = chartHtml;
+    } else {
+      chartEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;">ยังไม่มีข้อมูล — เริ่มใช้งานเพื่อดูสถิติ</div>';
+    }
+
+    // Provider breakdown
+    const providers = data.providers || [];
+    let provHtml = '<div style="display:grid;gap:8px;">';
+    providers.forEach(p => {
+      const status = p.has_key ? '<span style="color:var(--green);">✅ พร้อม</span>' : '<span style="color:var(--text3);">⚠️ ยังไม่ใส่ Key</span>';
+      provHtml += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg3);border-radius:10px;">
+        <span style="font-size:1.2rem;">${p.flag}</span>
+        <div style="flex:1;"><div style="font-weight:600;font-size:0.85rem;">${p.name}</div><div style="font-size:0.72rem;color:var(--text3);">${p.total_models} โมเดล (${p.free_models} ฟรี)</div></div>
+        <div style="font-size:0.8rem;">${status}</div>
+        <div style="font-size:0.75rem;color:var(--text3);">${p.speed}</div>
+      </div>`;
+    });
+    provHtml += '</div>';
+    document.getElementById('analytics-providers').innerHTML = provHtml;
+
+    // Cost estimation
+    const tokens = s.total_tokens || 0;
+    const costEstimate = (tokens / 1000000 * 0.5).toFixed(2); // rough estimate at $0.5/M tokens
+    document.getElementById('analytics-cost').innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+        <div style="background:var(--bg3);padding:16px;border-radius:10px;text-align:center;">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--green);">ฟรี</div>
+          <div style="font-size:0.75rem;color:var(--text3);margin-top:4px;">ค่าใช้จ่ายจริง (free tier)</div>
+        </div>
+        <div style="background:var(--bg3);padding:16px;border-radius:10px;text-align:center;">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--text2);">~$${costEstimate}</div>
+          <div style="font-size:0.75rem;color:var(--text3);margin-top:4px;">ถ้าจ่ายราคาปกติ (${fmtNum(tokens)} tokens)</div>
+        </div>
+        <div style="background:var(--bg3);padding:16px;border-radius:10px;text-align:center;">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--cyan);">${fmtNum(tokens)}</div>
+          <div style="font-size:0.75rem;color:var(--text3);margin-top:4px;">Tokens ที่ใช้ไปทั้งหมด</div>
+        </div>
+      </div>`;
+
+    // Cache stats
+    const cache = data.cache;
+    if (cache && cache.enabled !== false) {
+      document.getElementById('analytics-cost').innerHTML += `<div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:10px;font-size:0.8rem;color:var(--text3);">
+        💾 Cache: ${cache.hits || 0} hits / ${cache.misses || 0} misses (${cache.hit_rate || 0}% hit rate)
+      </div>`;
+    }
+  } catch(e) {
+    document.getElementById('analytics-stats').innerHTML = `<div class="card" style="color:var(--red);">❌ โหลดข้อมูลล้มเหลว: ${e.message}</div>`;
+  }
+}
+
+function statCard(icon, label, value, sub) {
+  return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center;">
+    <div style="font-size:1.5rem;margin-bottom:4px;">${icon}</div>
+    <div style="font-size:1.3rem;font-weight:700;">${value}</div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-top:2px;">${label}</div>
+    ${sub ? `<div style="font-size:0.65rem;color:var(--text3);margin-top:2px;">${sub}</div>` : ''}
+  </div>`;
+}
+
+function fmtNum(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return String(n);
 }
 
 // ── Init ──
