@@ -8,9 +8,7 @@ import json
 import time
 import hashlib
 import logging
-import asyncio
-import signal
-import sys
+import threading
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -38,19 +36,29 @@ log = logging.getLogger("routerai")
 
 # ── Load providers ──────────────────────────────────
 def load_providers():
-    with open(PROVIDERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(PROVIDERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log.error(f"Failed to load providers.json: {e}")
+        return {}
 
 def load_api_keys():
     if API_KEYS_FILE.exists():
-        with open(API_KEYS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(API_KEYS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            log.error(f"Failed to parse api_keys.json: {e}")
     return {}
 
 def load_proxy_config():
     if PROXY_CONFIG_FILE.exists():
-        with open(PROXY_CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(PROXY_CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            log.error(f"Failed to parse proxy_config.json: {e}")
     return {
         "prefer_free": True,
         "auto_failover": True,
@@ -182,7 +190,6 @@ class ProviderManager:
             # Check if we have an API key (except Ollama)
             env_key = provider.get("api_key_env")
             if env_key and not self.api_keys.get(env_key):
-                # Also check env vars directly
                 if not os.environ.get(env_key):
                     continue
 
@@ -219,13 +226,12 @@ class ProviderManager:
         provider = self.providers.get(provider_id, {})
         env_key = provider.get("api_key_env")
         if not env_key:
-            return "ollama"  # Ollama doesn't need a key
+            return "ollama"
         key = self.api_keys.get(env_key) or os.environ.get(env_key)
         return key
 
     def resolve_model(self, requested_model):
         """Find the best provider+model for a given model string"""
-        # Format: "provider/model" or just "model"
         if "/" in requested_model:
             provider_hint, model_id = requested_model.split("/", 1)
         else:
@@ -241,7 +247,6 @@ class ProviderManager:
                     for m in p["models"]:
                         if model_id in m["id"] or m["id"].endswith(model_id):
                             return p, m
-                    # Provider found but model not matched — use first model
                     if p["models"]:
                         return p, p["models"][0]
 
@@ -285,22 +290,31 @@ class ProviderManager:
 class ResponseCache:
     def __init__(self):
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self._enabled = True
+        self._ttl = 3600
+
+    def update_config(self, enabled, ttl):
+        """Update cache settings in memory (call on config reload)"""
+        self._enabled = enabled
+        self._ttl = ttl
 
     def _key(self, messages, model):
         content = json.dumps({"messages": messages, "model": model}, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()
 
     def get(self, messages, model):
-        if not load_proxy_config().get("cache_enabled", True):
+        if not self._enabled:
             return None
         key = self._key(messages, model)
         path = CACHE_DIR / f"{key}.json"
         if path.exists():
-            ttl = load_proxy_config().get("cache_ttl", 3600)
             age = time.time() - path.stat().st_mtime
-            if age < ttl:
-                with open(path, "r") as f:
-                    return json.load(f)
+            if age < self._ttl:
+                try:
+                    with open(path, "r") as f:
+                        return json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass
         return None
 
     def set(self, messages, model, response):
@@ -316,6 +330,54 @@ CORS(app)
 manager = ProviderManager()
 cache = ResponseCache()
 
+# Initialize cache config from loaded config
+_cache_cfg = manager.config
+cache.update_config(
+    _cache_cfg.get("cache_enabled", True),
+    _cache_cfg.get("cache_ttl", 3600)
+)
+
+# ── API Key Authentication ──────────────────────────
+ROUTERAI_API_KEY = os.environ.get("ROUTERAI_API_KEY", "")
+
+
+def _check_auth():
+    """Verify API key if ROUTERAI_API_KEY is set.
+    Skip auth for health check and when no key is configured."""
+    if not ROUTERAI_API_KEY:
+        return True  # No auth configured — open access
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+        if token == ROUTERAI_API_KEY:
+            return True
+    # Also accept via query param ?key= for OpenAI clients
+    if request.args.get("key") == ROUTERAI_API_KEY:
+        return True
+    return False
+
+
+@app.before_request
+def require_auth():
+    """Global auth check — skip for health & static"""
+    # Allow health check without auth
+    if request.path == "/health":
+        return None
+    # Allow dashboard static files and API without auth (dashboard runs locally)
+    if request.path.startswith("/api/") or request.path == "/" or not request.path.startswith("/v1/"):
+        return None
+    # For /v1/* endpoints, require auth if configured
+    if not _check_auth():
+        return jsonify({
+            "error": {
+                "message": "Invalid or missing API key. Set ROUTERAI_API_KEY env var and pass it as Bearer token.",
+                "type": "authentication_error",
+                "code": "invalid_api_key"
+            }
+        }), 401
+
+
+# ── OpenAI-Compatible Endpoints ─────────────────────
 @app.route("/v1/models", methods=["GET"])
 def list_models():
     """OpenAI-compatible model list"""
@@ -333,11 +395,39 @@ def list_models():
             })
     return jsonify({"object": "list", "data": models})
 
+
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
     """OpenAI-compatible chat completions with auto-failover"""
-    body = request.json or {}
+    if not request.is_json:
+        return jsonify({
+            "error": {
+                "message": "Request must be JSON with Content-Type: application/json",
+                "type": "invalid_request_error",
+                "code": "invalid_content_type"
+            }
+        }), 400
+
+    body = request.json
+    if not body:
+        return jsonify({
+            "error": {
+                "message": "Request body is empty",
+                "type": "invalid_request_error",
+                "code": "empty_body"
+            }
+        }), 400
+
     messages = body.get("messages", [])
+    if not messages:
+        return jsonify({
+            "error": {
+                "message": "Missing required field: messages",
+                "type": "invalid_request_error",
+                "code": "missing_messages"
+            }
+        }), 400
+
     requested_model = body.get("model", "llama-3.3-70b-versatile")
     stream = body.get("stream", False)
 
@@ -368,7 +458,6 @@ def chat_completions():
             }), 503
 
         if provider["id"] in tried:
-            # Find next available
             available = manager.get_available_providers()
             for p in available:
                 if p["id"] not in tried:
@@ -426,6 +515,7 @@ def chat_completions():
         }
     }), 503
 
+
 def _make_request(provider, model, body, api_key):
     """Make a non-streaming request to a provider"""
     url = f"{provider['api_base']}/chat/completions"
@@ -433,17 +523,17 @@ def _make_request(provider, model, body, api_key):
     if api_key and api_key != "ollama":
         headers["Authorization"] = f"Bearer {api_key}"
 
-    payload = {
-        **body,
-        "model": model["id"],
-        "stream": False
-    }
+    # Strip proxy-specific fields before forwarding
+    payload = {k: v for k, v in body.items() if k != "stream"}
+    payload["model"] = model["id"]
+    payload["stream"] = False
 
     timeout = manager.config.get("timeout", 60)
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         return resp.json()
+
 
 def _stream_request(provider, model, body, api_key, messages, requested_model):
     """Stream a request to a provider"""
@@ -452,11 +542,10 @@ def _stream_request(provider, model, body, api_key, messages, requested_model):
     if api_key and api_key != "ollama":
         headers["Authorization"] = f"Bearer {api_key}"
 
-    payload = {
-        **body,
-        "model": model["id"],
-        "stream": True
-    }
+    # Strip proxy-specific fields before forwarding
+    payload = {k: v for k, v in body.items() if k != "stream"}
+    payload["model"] = model["id"]
+    payload["stream"] = True
 
     start_time = time.time()
     full_response = ""
@@ -496,44 +585,52 @@ def _stream_request(provider, model, body, api_key, messages, requested_model):
         }
         yield f"data: {json.dumps(error_chunk)}\n\n"
 
+
 def _stream_from_cache(cached):
-    """Convert cached response to SSE stream"""
+    """Convert cached response to SSE stream (non-blocking chunked)"""
     choices = cached.get("choices", [])
     if choices:
         content = choices[0].get("message", {}).get("content", "")
-        # Simulate streaming
-        words = content.split()
-        for i, word in enumerate(words):
+        # Send full content in small character chunks without sleep
+        # Flask + gevent/gunicorn handles flushing properly
+        chunk_size = max(1, len(content) // 50)  # ~50 chunks
+        for i in range(0, len(content), chunk_size):
+            piece = content[i:i + chunk_size]
             chunk = {
                 "choices": [{
-                    "delta": {"content": word + (" " if i < len(words) - 1 else "")},
+                    "delta": {"content": piece},
                     "index": 0
                 }]
             }
             yield f"data: {json.dumps(chunk)}\n\n"
-            time.sleep(0.02)
     yield "data: [DONE]\n\n"
+
 
 # ── Dashboard API ───────────────────────────────────
 @app.route("/api/status", methods=["GET"])
 def api_status():
     """Overall system status"""
     available = manager.get_available_providers()
-    config = manager.config
     summary = manager.stats.get_summary(days=7)
 
     return jsonify({
         "status": "running",
         "providers_total": len(manager.providers),
         "providers_available": len(available),
-        "config": config,
+        "config": manager.config,
         "stats": summary
     })
+
 
 @app.route("/api/providers", methods=["GET"])
 def api_providers():
     """List all providers with status"""
     manager.reload()
+    # Update cache config on reload
+    cache.update_config(
+        manager.config.get("cache_enabled", True),
+        manager.config.get("cache_ttl", 3600)
+    )
     available_ids = {p["id"] for p in manager.get_available_providers()}
     result = []
 
@@ -567,6 +664,7 @@ def api_providers():
 
     return jsonify({"providers": result})
 
+
 @app.route("/api/keys", methods=["POST"])
 def api_save_keys():
     """Save API keys"""
@@ -574,6 +672,7 @@ def api_save_keys():
     manager.save_api_keys(data)
     manager.reload()
     return jsonify({"status": "ok", "message": "บันทึก API Key เรียบร้อย"})
+
 
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
@@ -585,8 +684,13 @@ def api_config():
         with open(PROXY_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(current, f, indent=2, ensure_ascii=False)
         manager.reload()
+        cache.update_config(
+            manager.config.get("cache_enabled", True),
+            manager.config.get("cache_ttl", 3600)
+        )
         return jsonify({"status": "ok", "message": "บันทึกการตั้งค่าเรียบร้อย"})
     return jsonify(load_proxy_config())
+
 
 @app.route("/api/openclaw-config", methods=["POST"])
 def api_openclaw_config():
@@ -609,11 +713,13 @@ def api_openclaw_config():
         "instructions": "คัดลอก config นี้ไปวางใน ~/.openclaw/openclaw.json แล้วรัน openclaw restart"
     })
 
+
 @app.route("/api/stats", methods=["GET"])
 def api_stats():
     """Get usage statistics"""
     days = int(request.args.get("days", 7))
     return jsonify(manager.stats.get_summary(days=days))
+
 
 @app.route("/api/test/<provider_id>", methods=["POST"])
 def api_test_provider(provider_id):
@@ -644,15 +750,17 @@ def api_test_provider(provider_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
 # ── Health Check ────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
+
 # ── Main ────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("ROUTERAI_PORT", 8900))
-    host = os.environ.get("ROUTERAI_HOST", "0.0.0.0")
+    host = os.environ.get("ROUTERAI_HOST", "127.0.0.1")
 
     print(f"""
 ╔══════════════════════════════════════════╗

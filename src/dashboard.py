@@ -1,4 +1,4 @@
-#!/usr/bin/env python3"
+#!/usr/bin/env python3
 """
 🔀 RouterAI Dashboard — Web UI for managing providers
 """

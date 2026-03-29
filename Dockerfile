@@ -2,11 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir httpx flask flask-cors gunicorn chromadb
+RUN pip install --no-cache-dir httpx flask flask-cors gunicorn
 
-COPY src/proxy.py ./src/proxy.py
-COPY providers.json .
 COPY src/ ./src/
+COPY providers.json .
 
 RUN mkdir -p /app/data/cache
 RUN echo '{}' > /app/api_keys.json
