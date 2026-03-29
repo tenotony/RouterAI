@@ -14,5 +14,5 @@ RUN mkdir -p data/cache
 
 EXPOSE 8900
 
-# Run unified server
-CMD ["gunicorn", "--bind", "0.0.0.0:8900", "--workers", "2", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "src.server:app"]
+# Run with gunicorn + uvicorn worker (production)
+CMD ["gunicorn", "--bind", "0.0.0.0:8900", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "server:app"]

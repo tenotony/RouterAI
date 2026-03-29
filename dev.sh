@@ -32,21 +32,22 @@ ensure_venv() {
 
 cmd_install() {
     ensure_venv
-    "$PIP" install -q pytest pytest-cov ruff
+    "$PIP" install -q pytest pytest-cov ruff httpx[http2]
     ok "Dependencies installed"
 }
 
 cmd_run() {
     ensure_venv
-    info "Starting RouterAI (unified server on port 8900)..."
+    info "Starting RouterAI (FastAPI on port 8900)..."
     info "Dashboard: http://127.0.0.1:8900"
+    info "API Docs:  http://127.0.0.1:8900/docs"
     info "Proxy:     http://127.0.0.1:8900/v1"
     "$PYTHON" src/server.py
 }
 
 cmd_test() {
     ensure_venv
-    "$PIP" install -q pytest pytest-cov 2>/dev/null
+    "$PIP" install -q pytest pytest-cov httpx[http2] 2>/dev/null
     info "Running tests..."
     "$VENV_DIR/bin/pytest" tests/ -v --tb=short
 }
@@ -105,7 +106,7 @@ case "${1:-help}" in
         echo "🔀 RouterAI Dev Script"
         echo "━━━━━━━━━━━━━━━━━━━━"
         echo "  ./dev.sh install      — Install deps + dev tools"
-        echo "  ./dev.sh run          — Run unified server (port 8900)"
+        echo "  ./dev.sh run          — Run FastAPI server (port 8900)"
         echo "  ./dev.sh test         — Run tests"
         echo "  ./dev.sh lint         — Lint code"
         echo "  ./dev.sh format      — Auto-format code"

@@ -14,7 +14,6 @@ services:
       - "${ROUTERAI_PORT:-8900}:8900"
     volumes:
       - routerai-data:/app/data
-      - routerai-config:/app/config
     env_file:
       - .env
     environment:
@@ -25,6 +24,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       # Set this to protect /v1/* endpoints (optional)
       # - ROUTERAI_API_KEY=your-secret-key
+      # Restrict CORS origins (comma-separated patterns)
+      # - ROUTERAI_CORS_ORIGINS=http://localhost:*,http://127.0.0.1:*
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
       interval: 30s
@@ -41,5 +42,3 @@ networks:
 volumes:
   routerai-data:
     name: routerai-data
-  routerai-config:
-    name: routerai-config
