@@ -7,7 +7,7 @@
 ## 📌 สถานะปัจจุบัน (Current State)
 
 ### ✅ ทำเสร็จแล้ว
-- [x] OpenAI-compatible proxy server (Flask)
+- [x] OpenAI-compatible proxy server (FastAPI)
 - [x] Dashboard UI ภาษาไทย (dark theme, responsive)
 - [x] Auto-failover ระหว่าง providers
 - [x] Response cache (ลดการเรียกซ้ำ)
@@ -25,41 +25,27 @@
 | # | ปัญหา | ผลกระทบ | ความยาก |
 |---|--------|---------|---------|
 | 1 | **Xiaomi MiMo API endpoint** เป็น placeholder — ยังไม่มี URL จริง | MiMo ใช้ไม่ได้ | ต้องรอข้อมูลจาก Xiaomi |
-| 2 | **Dashboard API proxy** (`/api/*` ใน dashboard.py) ไม่ได้ proxy ไปยัง proxy server — ต้องเลือกอย่างใดอย่างหนึ่ง | Dashboard ดึงข้อมูลจากตัวเอง ไม่ใช่ proxy | กลาง |
-| 3 | **ไม่มี rate limiting** ใน proxy — ใครก็เรียก API ได้ไม่จำกัด | ถูก abuse ได้ | กลาง |
-| 4 | **Stats file** เก็บเป็น JSON เดียว — ช้าเมื่อข้อมูลเยอะ | ช้าลงเรื่อยๆ | ยาก |
 
 ---
 
-## 🎯 Phase 1: แก้ไขพื้นฐาน (Foundation Fixes)
+## 🎯 Phase 1: แก้ไขพื้นฐาน (Foundation Fixes) ✅ เสร็จแล้ว
 > **ระยะเวลา:** 1-2 สัปดาห์
 
-### 1.1 Architecture ให้ถูกต้อง
-ปัจจุบัน proxy.py มีทั้ง proxy logic + dashboard API ซ้ำกับ dashboard.py
+### 1.1 Architecture ให้ถูกต้อง ✅
+- [x] รวมเป็นไฟล์เดียว (`server.py`) ที่ทำทั้ง proxy + dashboard API
+- [x] Dashboard frontend เรียก `/api/*` ผ่าน proxy ตัวเดียว (port 8900)
+- [x] เปลี่ยนเป็น FastAPI (async, เร็วกว่า)
+- [x] SQLite แทน file-based stats
 
-**สิ่งที่ต้องทำ:**
-- [ ] รวมเป็นไฟล์เดียว (`server.py`) ที่ทำทั้ง proxy + dashboard API
-- [ ] หรือ แยกชัดเจน: `proxy.py` = แค่ proxy, `dashboard.py` = แค่ serve UI + proxy API calls ไปยัง proxy
-- [ ] Dashboard frontend เรียก `/api/*` ผ่าน proxy ตัวเดียว (port 8900) ไม่ต้องมี 2 port
-
-```python
-# ทางเลือกที่แนะนำ: รวมเป็นไฟล์เดียว
-# src/server.py — รัน port เดียว ทำทั้ง proxy + dashboard
-# /v1/*        → OpenAI proxy
-# /api/*       → Dashboard API
-# /            → Dashboard UI (static files)
-```
-
-### 1.2 Docker Volume Fix (Windows)
-- [x] ~~เปลี่ยน bind mount → named volumes~~ ✅ ทำแล้ว
-- [ ] เพิ่ม Docker health check ที่ดีขึ้น (check ทั้ง proxy + dashboard)
-- [ ] สร้าง `docker-compose.prod.yml` สำหรับ production (nginx reverse proxy)
+### 1.2 Docker ✅
+- [x] เปลี่ยน bind mount → named volumes
+- [x] Docker health check
+- [x] Docker Compose setup
 
 ### 1.3 Error Handling
 - [ ] เพิ่ม retry with exponential backoff (ตอนนี้ failover แต่ไม่ retry provider เดิม)
 - [ ] จัดการ rate limit response (429) — รอแล้ว retry หรือ switch provider
 - [ ] จัดการ timeout ให้ดีขึ้น — ตอนนี้ streaming timeout = 120s (นานไป)
-- [ ] Error message เป็นภาษาไทยที่เข้าใจง่ายกว่านี้
 
 ---
 
@@ -196,7 +182,7 @@ def check_auth():
 > **ระยะเวลา:** 2-3 สัปดาห์
 
 ### 6.1 Performance
-- [ ] เปลี่ยนจาก Flask → FastAPI (async, เร็วกว่า)
+- [x] ~~เปลี่ยนจาก Flask → FastAPI~~ ✅ ทำแล้ว
 - [ ] เปลี่ยนจาก file-based stats → SQLite หรือ PostgreSQL
 - [ ] Connection pooling สำหรับ HTTP clients
 - [ ] Streaming performance optimization
@@ -262,7 +248,6 @@ def check_auth():
 ### Dependencies
 - [ ] Pin dependency versions (ตอนนี้ไม่มี version pin)
 - [ ] Security audit dependencies
-- [ ] Remove unused deps (chromadb ใน Dockerfile?)
 
 ---
 
@@ -309,13 +294,18 @@ def check_auth():
 ```
 RouterAI/
 ├── src/
-│   ├── proxy.py        ← Main proxy (OpenAI API compatible)
-│   └── dashboard.py    ← Dashboard server (ควรรวมกับ proxy.py)
+│   └── server.py       ← Unified server (proxy + dashboard + API) — FastAPI
 ├── web/
 │   └── index.html      ← Dashboard UI (vanilla JS, Thai)
+├── tests/
+│   └── test_core.py    ← Unit tests
 ├── scripts/            ← Install & setup scripts
+├── .github/
+│   └── workflows/
+│       └── ci.yml      ← GitHub Actions CI
 ├── providers.json      ← Provider config (เพิ่ม/ลด ได้)
 ├── docker-compose.yml  ← Docker deployment
+├── Dockerfile          ← Docker image
 ├── .env.example        ← Environment template
 ├── requirements.txt    ← Python deps
 ├── README.md           ← User documentation
@@ -323,8 +313,8 @@ RouterAI/
 ```
 
 ### Key Design Decisions
-- **Flask ไม่ใช่ FastAPI** — เพราะเขียนง่าย แต่อนาคตควรเปลี่ยน
-- **File-based storage** — ไม่ต้องตั้งค่า DB แต่ไม่ scalable
+- **FastAPI** — async, เร็ว, auto OpenAPI docs (`/docs`)
+- **SQLite** — lightweight, embedded, scalable กว่า file-based JSON
 - **Vanilla JS** — ไม่ต้อง build step แต่โค้ดยาว
 - **Port 8900 (proxy) + 8899 (dashboard)** — แยกกันตอนนี้ แต่ควรรวม
 
@@ -343,5 +333,5 @@ RouterAI ควรเป็น:
 
 ---
 
-*Last updated: 2026-03-28*
+*Last updated: 2026-03-29*
 *Author: RouterAI Team + AI Assistant*

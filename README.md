@@ -125,6 +125,17 @@ http://localhost:8900
 
 ---
 
+## 📚 API Documentation
+
+RouterAI มี API docs อัตโนมัติจาก FastAPI:
+
+```
+http://localhost:8900/docs      # Swagger UI (interactive)
+http://localhost:8900/redoc     # ReDoc (สวยๆ)
+```
+
+---
+
 ## 🏗️ สถาปัตยกรรม
 
 ```

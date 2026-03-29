@@ -20,14 +20,14 @@
     "api_base": "https://api.xiaomi.com/mimo/v1",
     "api_key_env": "MIMO_API_KEY",
     "models": [
-      {"id": "MiMo-v2-pro", "context": 65536, "free": true, "priority": 98, "desc": "MiMo รุ่นล่าสุด คุณภาพสูง"},
-      {"id": "MiMo-v2-lite", "context": 65536, "free": true, "priority": 92, "desc": "MiMo รุ่นเบา เร็ว"},
-      {"id": "MiMo-v1", "context": 32768, "free": true, "priority": 88, "desc": "MiMo รุ่นแรก"}
+      {"id": "MiMo-V2-Pro", "context": 65536, "free": true, "priority": 98, "desc": "MiMo รุ่นล่าสุด คุณภาพสูง"},
+      {"id": "MiMo-V2-Flash", "context": 262144, "free": true, "priority": 96, "desc": "MiMo V2 Flash เร็ว MoE 309B"},
+      {"id": "MiMo-V2-Lite", "context": 65536, "free": true, "priority": 92, "desc": "MiMo รุ่นเบา เร็ว"}
     ],
     "rate_limit": {"rpm": 60, "tpm": 100000},
     "speed": "⚡⚡⚡⚡",
-    "signup_url": "https://xiaomi.com/mimo",
-    "desc": "Xiaomi AI คุณภาพสูง ฟรี",
+    "signup_url": "https://mimo.xiaomi.com",
+    "desc": "Xiaomi AI คุณภาพสูง ฟรี — ถ้า endpoint นี้ไม่ทำงาน ใช้ผ่าน OpenRouter แทน",
     "flag": "🇨🇳"
   },
   "google": {
@@ -68,6 +68,8 @@
       {"id": "google/gemma-2-9b-it:free", "context": 8192, "free": true, "priority": 80, "desc": "Gemma 9B ฟรี"},
       {"id": "mistralai/mistral-7b-instruct:free", "context": 32768, "free": true, "priority": 75, "desc": "Mistral 7B ฟรี"},
       {"id": "microsoft/phi-3-mini-128k-instruct:free", "context": 128000, "free": true, "priority": 72, "desc": "Phi-3 ฟรี"},
+      {"id": "xiaomi/mimo-v2-flash", "context": 262144, "free": false, "cost_per_1k": 0.00009, "priority": 88, "desc": "MiMo V2 Flash ผ่าน OpenRouter"},
+      {"id": "xiaomi/mimo-v2-pro", "context": 65536, "free": false, "cost_per_1k": 0.0004, "priority": 86, "desc": "MiMo V2 Pro ผ่าน OpenRouter"},
       {"id": "anthropic/claude-3.5-sonnet", "context": 200000, "free": false, "cost_per_1k": 0.003, "priority": 70, "desc": "Claude 3.5 จ่ายเงิน"},
       {"id": "openai/gpt-4o", "context": 128000, "free": false, "cost_per_1k": 0.005, "priority": 65, "desc": "GPT-4o จ่ายเงิน"}
     ],
