@@ -1,0 +1,190 @@
+{
+  "_comment": "OpenClaw Multi-Agent Architecture for RouterAI",
+  "_version": "1.0.0",
+  "_updated": "2026-03-29",
+
+  "architecture": {
+    "layers": [
+      {
+        "layer": 0,
+        "name": "ผู้ใช้ (Human)",
+        "description": "คนสั่งงานผ่าน Chat, Dashboard, API"
+      },
+      {
+        "layer": 1,
+        "name": "CEO Agent",
+        "description": "ผู้บริหาร — รับงาน วิเคราะห์ กระจายงาน ติดตามผล"
+      },
+      {
+        "layer": 2,
+        "name": "Worker Agents (ลูกน้อง)",
+        "description": "ผู้เชี่ยวชาญแยกตามสกิล — ลงมือทำงานจริง"
+      },
+      {
+        "layer": 3,
+        "name": "RouterAI",
+        "description": "เครื่องมือช่วย — สลับโมเดล เร่งความเร็ว คุมงบ"
+      },
+      {
+        "layer": 4,
+        "name": "Knowledge Base",
+        "description": "คลังความรู้รวม — AI + คน ใช้ร่วมกัน"
+      }
+    ]
+  },
+
+  "ceo": {
+    "id": "ceo",
+    "role": "ผู้บริหาร (CEO)",
+    "emoji": "🧠",
+    "description": "รับงานจากผู้ใช้ วิเคราะห์ กระจายงานให้ลูกน้อง ติดตามผล สรุปส่งกลับ",
+    "responsibilities": [
+      "รับคำสั่งจากผู้ใช้",
+      "วิเคราะห์ว่างานเหมาะกับลูกน้องตัวไหน",
+      "กระจายงานไปยัง sub-agents หลายคนพร้อมกัน",
+      "ติดตามความคืบหน้า",
+      "รวบรวมผลลัพธ์ ส่งกลับให้ผู้ใช้",
+      "บันทึกผลลงคลังความรู้"
+    ],
+    "model_strategy": {
+      "free": "groq/llama-3.3-70b-versatile",
+      "paid_upgrade": "openrouter/anthropic/claude-3.5-sonnet",
+      "reason": "ต้องการความเร็วในการตัดสินใจ"
+    }
+  },
+
+  "workers": {
+    "writer": {
+      "id": "writer",
+      "name": "น้องเขียน",
+      "emoji": "✍️",
+      "role": "ผู้เชี่ยวชาญด้านการเขียน",
+      "skills": ["writing-assistant", "summarize", "mimo-tts-wav"],
+      "responsibilities": [
+        "เขียนบทความ / Blog",
+        "สรุปเอกสาร / รายงาน",
+        "แปลภาษา",
+        "เขียนอีเมล / จดหมาย",
+        "สร้าง PowerPoint"
+      ],
+      "model_strategy": {
+        "free": "routerai/mimo/MiMo-v2-pro",
+        "paid_upgrade": "routerai/openrouter/anthropic/claude-3.5-sonnet",
+        "reason": "MiMo เขียนภาษาไทยดีสุด ฟรี"
+      }
+    },
+    "coder": {
+      "id": "coder",
+      "name": "น้องโค้ด",
+      "emoji": "💻",
+      "role": "ผู้เชี่ยวชาญด้านการเขียนโค้ด",
+      "skills": ["github", "excel-xlsx", "wbs-planner"],
+      "responsibilities": [
+        "เขียนโค้ด / Debug",
+        "Git / PR / Code Review",
+        "ทดสอบ / Deploy",
+        "ออกแบบระบบ"
+      ],
+      "model_strategy": {
+        "free": "routerai/groq/llama-3.3-70b-versatile",
+        "paid_upgrade": "routerai/openrouter/openai/gpt-4o",
+        "reason": "Groq เร็ว + ฉลาด ดีสำหรับโค้ด"
+      }
+    },
+    "researcher": {
+      "id": "researcher",
+      "name": "น้องสืบ",
+      "emoji": "🔍",
+      "role": "ผู้เชี่ยวชาญด้านการค้นหาและวิเคราะห์",
+      "skills": ["mimo-omni", "mimo-search", "summarize"],
+      "responsibilities": [
+        "ค้นหาข้อมูลเว็บ",
+        "วิเคราะห์รูปภาพ / PDF",
+        "เปรียบเทียบข้อมูล",
+        "ข่าว / วิเคราะห์แนวโน้ม"
+      ],
+      "model_strategy": {
+        "free": "routerai/google/gemini-2.0-flash",
+        "paid_upgrade": "routerai/deepseek/deepseek-chat",
+        "reason": "Gemini ฟรี + Vision ดี"
+      }
+    },
+    "data": {
+      "id": "data",
+      "name": "น้องข้อมูล",
+      "emoji": "📊",
+      "role": "ผู้เชี่ยวชาญด้านข้อมูลและรายงาน",
+      "skills": ["excel-xlsx", "chart-image", "powerpoint-pptx"],
+      "responsibilities": [
+        "Excel / CSV / รายงาน",
+        "กราฟ / แผนภูมิ",
+        "คำนวณ / สถิติ",
+        "สร้าง PowerPoint"
+      ],
+      "model_strategy": {
+        "free": "routerai/cerebras/llama3.1-70b",
+        "paid_upgrade": "routerai/openrouter/anthropic/claude-3.5-sonnet",
+        "reason": "Cerebras เร็ว + ฟรี"
+      }
+    },
+    "ops": {
+      "id": "ops",
+      "name": "น้องจัดการ",
+      "emoji": "⚙️",
+      "role": "ผู้เชี่ยวชาญด้านการจัดการและระบบ",
+      "skills": ["system-monitor-pro", "healthcheck"],
+      "responsibilities": [
+        "ตั้งเวลา / Cron",
+        "ส่งอีเมล / แจ้งเตือน",
+        "จัดระเบียบไฟล์",
+        "Monitor ระบบ"
+      ],
+      "model_strategy": {
+        "free": "routerai/openrouter/meta-llama/llama-3.1-8b-instruct:free",
+        "paid_upgrade": "routerai/openrouter/anthropic/claude-3.5-sonnet",
+        "reason": "OpenRouter fallback สุดท้าย"
+      }
+    }
+  },
+
+  "routerai": {
+    "role": "เครื่องมือช่วย (Infrastructure)",
+    "description": "OpenAI-compatible proxy สลับโมเดลฟรีอัตโนมัติ",
+    "features": [
+      "Auto model switching",
+      "Response caching",
+      "Budget control",
+      "Failover",
+      "Dashboard (ภาษาไทย)"
+    ],
+    "endpoint": "http://127.0.0.1:8900/v1",
+    "dashboard": "http://127.0.0.1:8899"
+  },
+
+  "knowledge_base": {
+    "role": "คลังความรู้รวม",
+    "description": "ทั้ง AI และ คน ใช้ร่วมกัน",
+    "layers": [
+      {
+        "name": "MEMORY.md",
+        "description": "ความทรงจำ AI — การตัดสินใจ บทเรียน context สำคัญ",
+        "who_writes": ["AI", "CEO Agent"]
+      },
+      {
+        "name": "memory/YYYY-MM-DD.md",
+        "description": "บันทึกประจำวัน — สิ่งที่ทำ ปัญหา ผลลัพธ์",
+        "who_writes": ["AI", "Worker Agents"]
+      },
+      {
+        "name": "documents/",
+        "description": "เอกสาร PDF คู่มือ SOP",
+        "who_writes": ["Human", "AI"]
+      },
+      {
+        "name": "data/",
+        "description": "Excel CSV ฐานข้อมูล",
+        "who_writes": ["Human", "Worker Agents"]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+# Knowledge Base — ignore actual data, keep structure
+knowledge-base/memory/*.md
+!knowledge-base/memory/.gitkeep
+knowledge-base/data/*
+!knowledge-base/data/.gitkeep
+knowledge-base/documents/*
+!knowledge-base/documents/.gitkeep
+knowledge-base/projects/*
+!knowledge-base/projects/.gitkeep
+
+# Environment
+.env

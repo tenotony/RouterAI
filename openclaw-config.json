@@ -1,0 +1,134 @@
+{
+  "_comment": "OpenClaw config สำหรับเชื่อมต่อกับ RouterAI — คัดลอกไปใส่ใน openclaw.json",
+
+  "models": {
+    "providers": {
+      "routerai": {
+        "name": "RouterAI",
+        "baseUrl": "http://127.0.0.1:8900/v1",
+        "apiKey": "routerai",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "groq/llama-3.3-70b-versatile",
+            "name": "Groq Llama 70B (เร็วสุด)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 131072,
+            "maxTokens": 32768
+          },
+          {
+            "id": "mimo/MiMo-v2-pro",
+            "name": "MiMo V2 Pro (ไทยดี)",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 65536,
+            "maxTokens": 16384
+          },
+          {
+            "id": "google/gemini-2.0-flash",
+            "name": "Gemini 2.0 Flash (Vision)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 1048576,
+            "maxTokens": 8192
+          },
+          {
+            "id": "cerebras/llama3.1-70b",
+            "name": "Cerebras Llama 70B (เร็วมาก)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 8192,
+            "maxTokens": 8192
+          },
+          {
+            "id": "openrouter/meta-llama/llama-3.1-8b-instruct:free",
+            "name": "OpenRouter Llama 8B (Fallback)",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          }
+        ]
+      }
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "routerai/groq/llama-3.3-70b-versatile"
+      },
+      "models": {
+        "routerai/groq/llama-3.3-70b-versatile": {},
+        "routerai/mimo/MiMo-v2-pro": {},
+        "routerai/google/gemini-2.0-flash": {},
+        "routerai/cerebras/llama3.1-70b": {},
+        "routerai/openrouter/meta-llama/llama-3.1-8b-instruct:free": {}
+      },
+      "workspace": "/root/.openclaw/workspace"
+    },
+
+    "list": [
+      {
+        "id": "ceo",
+        "default": true,
+        "name": "CEO Agent",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/ceo",
+        "model": {
+          "primary": "routerai/groq/llama-3.3-70b-versatile"
+        }
+      },
+      {
+        "id": "writer",
+        "name": "น้องเขียน (Writer)",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/writer",
+        "model": {
+          "primary": "routerai/mimo/MiMo-v2-pro"
+        },
+        "skills": ["writing-assistant", "summarize", "mimo-tts-wav"]
+      },
+      {
+        "id": "coder",
+        "name": "น้องโค้ด (Coder)",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/coder",
+        "model": {
+          "primary": "routerai/groq/llama-3.3-70b-versatile"
+        },
+        "skills": ["github", "excel-xlsx", "wbs-planner"]
+      },
+      {
+        "id": "researcher",
+        "name": "น้องสืบ (Researcher)",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/researcher",
+        "model": {
+          "primary": "routerai/google/gemini-2.0-flash"
+        },
+        "skills": ["mimo-omni", "mimo-search", "summarize"]
+      },
+      {
+        "id": "data",
+        "name": "น้องข้อมูล (Data)",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/data",
+        "model": {
+          "primary": "routerai/cerebras/llama3.1-70b"
+        },
+        "skills": ["excel-xlsx", "chart-image", "powerpoint-pptx"]
+      },
+      {
+        "id": "ops",
+        "name": "น้องจัดการ (Ops)",
+        "agentDir": "/root/.openclaw/workspace/RouterAI/agents/ops",
+        "model": {
+          "primary": "routerai/openrouter/meta-llama/llama-3.1-8b-instruct:free"
+        },
+        "skills": ["system-monitor-pro", "healthcheck"]
+      }
+    ]
+  }
+}
