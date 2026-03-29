@@ -15,4 +15,4 @@ RUN mkdir -p data/cache
 EXPOSE 8900
 
 # Run with gunicorn + uvicorn worker (production)
-CMD ["gunicorn", "--bind", "0.0.0.0:8900", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "server:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8900", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--pythonpath", "src", "server:app"]

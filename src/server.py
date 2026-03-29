@@ -107,6 +107,16 @@ class StatsDB:
         self._init_tables()
         self._cleanup_old()
 
+    def _ensure_conn(self):
+        """Reconnect if connection was closed (e.g. by lifespan shutdown in tests)."""
+        try:
+            self._conn.execute("SELECT 1")
+        except (sqlite3.ProgrammingError, sqlite3.InterfaceError):
+            self._conn = sqlite3.connect(str(STATS_DB), check_same_thread=False)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
+            self._init_tables()
+
     def _init_tables(self):
         with self._lock:
             self._conn.executescript("""
@@ -135,12 +145,14 @@ class StatsDB:
             self._conn.commit()
 
     def _cleanup_old(self):
+        self._ensure_conn()
         cutoff = (datetime.now() - timedelta(days=30)).isoformat()
         with self._lock:
             self._conn.execute("DELETE FROM requests WHERE ts < ?", (cutoff,))
             self._conn.commit()
 
     def record(self, provider, model, tokens_in, tokens_out, latency_ms, success, error=None):
+        self._ensure_conn()
         now = datetime.now().isoformat()
         with self._lock:
             self._conn.execute(
@@ -164,19 +176,22 @@ class StatsDB:
             self._conn.commit()
 
     def get_summary(self, days=7):
+        self._ensure_conn()
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         with self._lock:
             cur = self._conn.execute(
-                "SELECT COUNT(*), SUM(success), SUM(tokens_in), SUM(tokens_out), AVG(latency_ms) "
+                "SELECT COUNT(*), SUM(success), SUM(CASE WHEN success=0 THEN 1 ELSE 0 END), "
+                "SUM(tokens_in), SUM(tokens_out), AVG(latency_ms) "
                 "FROM requests WHERE ts > ?",
                 (cutoff,),
             )
             row = cur.fetchone()
             total = row[0] or 0
             success_count = row[1] or 0
-            total_tokens_in = row[2] or 0
-            total_tokens_out = row[3] or 0
-            avg_latency = round(row[4] or 0)
+            fail_count = row[2] or 0
+            total_tokens_in = row[3] or 0
+            total_tokens_out = row[4] or 0
+            avg_latency = round(row[5] or 0)
 
             # By provider
             cur = self._conn.execute(
@@ -193,6 +208,21 @@ class StatsDB:
                     "avg_latency": round(prow[4] or 0),
                 }
 
+            # Daily breakdown
+            cur = self._conn.execute(
+                "SELECT SUBSTR(ts, 1, 10) AS day, COUNT(*), SUM(success), SUM(tokens_in + tokens_out) "
+                "FROM requests WHERE ts > ? GROUP BY day ORDER BY day",
+                (cutoff,),
+            )
+            daily = []
+            for drow in cur.fetchall():
+                daily.append({
+                    "date": drow[0],
+                    "requests": drow[1],
+                    "success": drow[2] or 0,
+                    "tokens": drow[3] or 0,
+                })
+
             # Provider health
             cur = self._conn.execute("SELECT provider, success, fail, last_error, last_check FROM provider_health")
             provider_health = {}
@@ -207,16 +237,22 @@ class StatsDB:
         return {
             "total_requests": total,
             "success_rate": round(success_count / total * 100, 1) if total else 0,
+            "successful_requests": success_count,
+            "failed_requests": fail_count,
             "total_tokens_in": total_tokens_in,
             "total_tokens_out": total_tokens_out,
             "avg_latency_ms": avg_latency,
             "by_provider": by_provider,
+            "daily": daily,
             "provider_health": provider_health,
         }
 
     def close(self):
         with self._lock:
-            self._conn.close()
+            try:
+                self._conn.close()
+            except sqlite3.ProgrammingError:
+                pass  # Already closed
 
 
 # ── Rate Limiter ────────────────────────────────────
@@ -380,6 +416,8 @@ class ResponseCache:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         self._enabled = True
         self._ttl = 3600
+        self._hits = 0
+        self._misses = 0
 
     def update_config(self, enabled, ttl):
         self._enabled = enabled
@@ -399,9 +437,12 @@ class ResponseCache:
             if age < self._ttl:
                 try:
                     with open(path, "r") as f:
-                        return json.load(f)
+                        result = json.load(f)
+                    self._hits += 1
+                    return result
                 except (json.JSONDecodeError, OSError):
                     pass
+        self._misses += 1
         return None
 
     def set(self, messages, model, response):
@@ -416,11 +457,15 @@ class ResponseCache:
     def get_stats(self):
         files = list(CACHE_DIR.glob("*.json"))
         total_size = sum(f.stat().st_size for f in files)
+        total_req = self._hits + self._misses
         return {
             "entries": len(files),
             "total_size_kb": round(total_size / 1024, 1),
             "enabled": self._enabled,
             "ttl_seconds": self._ttl,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(self._hits / total_req * 100, 1) if total_req > 0 else 0,
         }
 
 
@@ -787,7 +832,8 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
     full_response = ""
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        stream_timeout = manager.config.get("timeout", 60) * 2  # streaming ใช้ 2x timeout
+        async with httpx.AsyncClient(timeout=stream_timeout) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -1145,7 +1191,7 @@ async def api_analytics(days: int = 7):
         },
         "daily": summary.get("daily", []),
         "providers": provider_stats,
-        "cache": manager.cache.get_stats() if manager.cache.enabled else {"enabled": False},
+        "cache": cache.get_stats() if cache._enabled else {"enabled": False},
     }
 
 

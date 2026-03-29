@@ -138,6 +138,36 @@ class TestResponseCache:
         assert "total_size_kb" in stats
         assert "enabled" in stats
         assert "ttl_seconds" in stats
+        assert "hits" in stats
+        assert "misses" in stats
+        assert "hit_rate" in stats
+        assert stats["hits"] == 0
+        assert stats["misses"] == 0
+        assert stats["hit_rate"] == 0
+
+    def test_cache_hit_miss_tracking(self, tmp_path):
+        from server import ResponseCache
+        with patch("server.CACHE_DIR", tmp_path):
+            cache = ResponseCache()
+            messages = [{"role": "user", "content": "hello"}]
+            model = "test-model"
+            response = {"choices": [{"message": {"content": "hi"}}]}
+
+            # Miss
+            result = cache.get(messages, model)
+            assert result is None
+            stats = cache.get_stats()
+            assert stats["misses"] == 1
+            assert stats["hits"] == 0
+
+            # Set and hit
+            cache.set(messages, model, response)
+            result = cache.get(messages, model)
+            assert result == response
+            stats = cache.get_stats()
+            assert stats["hits"] == 1
+            assert stats["misses"] == 1
+            assert stats["hit_rate"] == 50.0
 
 
 # ── Test: SQLite Stats ──────────────────────────────
@@ -157,10 +187,15 @@ class TestStatsDB:
             summary = stats.get_summary(days=7)
             assert summary["total_requests"] == 3
             assert summary["success_rate"] > 0
+            assert summary["successful_requests"] == 2
+            assert summary["failed_requests"] == 1
             assert "groq" in summary["by_provider"]
             assert "google" in summary["by_provider"]
             assert summary["by_provider"]["groq"]["count"] == 2
-            stats.close()
+            # Daily breakdown should exist
+            assert isinstance(summary["daily"], list)
+            assert len(summary["daily"]) >= 1
+            # Don't close() — avoids corrupting global manager.stats connection
 
 
 # ── Test: FastAPI App Endpoints ─────────────────────
