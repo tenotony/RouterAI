@@ -20,6 +20,7 @@ import logging
 import sqlite3
 import threading
 import signal
+import secrets
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -35,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 BASE_DIR = Path(__file__).parent.parent
 PROVIDERS_FILE = BASE_DIR / "providers.json"
 API_KEYS_FILE = BASE_DIR / "api_keys.json"
+ENCRYPTION_KEY_FILE = BASE_DIR / "data" / ".encryption_key"
 PROXY_CONFIG_FILE = BASE_DIR / "proxy_config.json"
 DATA_DIR = BASE_DIR / "data"
 CACHE_DIR = DATA_DIR / "cache"
@@ -79,8 +81,9 @@ def load_proxy_config():
         "budget_daily_usd": 0,
         "budget_action": "downgrade",
         "max_retries": 3,
-        "timeout": 60,
-        "rate_limit_rpm": 0,  # 0 = unlimited
+        "timeout": 30,           # non-streaming timeout (seconds)
+        "stream_timeout": 60,    # streaming timeout (seconds)
+        "rate_limit_rpm": 0,     # 0 = unlimited
     }
     cfg = load_json_file(PROXY_CONFIG_FILE, {})
     defaults.update(cfg)
@@ -92,6 +95,101 @@ def save_json_file(path: Path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def mask_key(key: str) -> str:
+    """Mask an API key, showing only last 4 characters: sk-...xxxx"""
+    if not key or len(key) < 8:
+        return key or ""
+    return f"{key[:3]}...{key[-4:]}"
+
+
+# ── Encrypted Key Store ─────────────────────────────
+class KeyStore:
+    """
+    Encrypted API key storage using Fernet (AES-128-CBC).
+    Keys are encrypted at rest in api_keys.json.
+    The encryption key is stored in data/.encryption_key (auto-generated).
+    Falls back to plaintext for backward compatibility.
+    """
+
+    def __init__(self):
+        self._fernet = None
+        self._init_encryption()
+
+    def _init_encryption(self):
+        """Initialize Fernet encryption. Generate key if not exists."""
+        try:
+            from cryptography.fernet import Fernet
+
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            if ENCRYPTION_KEY_FILE.exists():
+                key = ENCRYPTION_KEY_FILE.read_bytes().strip()
+            else:
+                key = Fernet.generate_key()
+                ENCRYPTION_KEY_FILE.write_bytes(key)
+                # Restrict permissions
+                import stat
+
+                ENCRYPTION_KEY_FILE.chmod(stat.S_IRUSR | stat.S_IWUSR)
+                log.info("Generated new encryption key for API key storage")
+            self._fernet = Fernet(key)
+        except ImportError:
+            log.warning("cryptography library not found — API keys stored in plaintext. Install: pip install cryptography")
+            self._fernet = None
+        except Exception as e:
+            log.error(f"Failed to init encryption: {e}")
+            self._fernet = None
+
+    def is_encrypted(self) -> bool:
+        return self._fernet is not None
+
+    def encrypt(self, plaintext: str) -> str:
+        """Encrypt a key value. Returns 'ENC:<base64>' prefix string."""
+        if not self._fernet:
+            return plaintext
+        encrypted = self._fernet.encrypt(plaintext.encode())
+        return f"ENC:{encrypted.decode()}"
+
+    def decrypt(self, stored_value: str) -> str:
+        """Decrypt a stored value. Handles both encrypted and legacy plaintext."""
+        if not stored_value:
+            return ""
+        if stored_value.startswith("ENC:"):
+            if not self._fernet:
+                log.error("Cannot decrypt: cryptography not available")
+                return ""
+            try:
+                return self._fernet.decrypt(stored_value[4:].encode()).decode()
+            except Exception as e:
+                log.error(f"Decryption failed: {e}")
+                return ""
+        # Legacy plaintext — still works, will be re-encrypted on next save
+        return stored_value
+
+    def load_keys(self) -> dict:
+        """Load and decrypt all API keys."""
+        raw = load_json_file(API_KEYS_FILE, {})
+        return {k: self.decrypt(v) for k, v in raw.items()}
+
+    def save_keys(self, keys: dict) -> None:
+        """Encrypt and save API keys. Merges with existing."""
+        existing = load_json_file(API_KEYS_FILE, {})
+        for k, v in keys.items():
+            if v:  # Only save non-empty
+                existing[k] = self.encrypt(v)
+            elif k in existing:
+                del existing[k]  # Remove cleared keys
+        save_json_file(API_KEYS_FILE, existing)
+
+    def get_masked_keys(self) -> dict:
+        """Return all keys masked for display: sk-...xxxx"""
+        raw = load_json_file(API_KEYS_FILE, {})
+        decrypted = {k: self.decrypt(v) for k, v in raw.items()}
+        return {k: mask_key(v) for k, v in decrypted.items() if v}
+
+
+key_store = KeyStore()
 
 
 # ── SQLite Stats ────────────────────────────────────
@@ -303,7 +401,7 @@ class RateLimiter:
 class ProviderManager:
     def __init__(self):
         self.providers = load_providers()
-        self.api_keys = load_api_keys()
+        self.api_keys = key_store.load_keys()
         self.config = load_proxy_config()
         self.stats = StatsDB()
         self._error_counts: dict = defaultdict(int)
@@ -400,12 +498,12 @@ class ProviderManager:
         self._cooldown_until[provider_id] = 0
 
     def save_api_keys(self, keys):
-        self.api_keys.update(keys)
-        save_json_file(API_KEYS_FILE, self.api_keys)
+        key_store.save_keys(keys)
+        self.api_keys = key_store.load_keys()
 
     def reload(self):
         self.providers = load_providers()
-        self.api_keys = load_api_keys()
+        self.api_keys = key_store.load_keys()
         self.config = load_proxy_config()
         self._reload_keys_from_env()
 
@@ -496,11 +594,60 @@ def close_http_client():
 
 # ── Globals ─────────────────────────────────────────
 ROUTERAI_API_KEY = os.environ.get("ROUTERAI_API_KEY", "")
-CORS_ORIGINS = os.environ.get("ROUTERAI_CORS_ORIGINS", "http://localhost:*,http://127.0.0.1:*").split(",")
+DASHBOARD_PASSWORD = os.environ.get("ROUTERAI_DASHBOARD_PASSWORD", "")
+DASHBOARD_AUTH_ENABLED = bool(DASHBOARD_PASSWORD)
+CORS_ORIGINS_ENV = os.environ.get("ROUTERAI_CORS_ORIGINS", "http://localhost:*,http://127.0.0.1:*")
+# Parse CORS: support comma-separated origins, strip whitespace
+CORS_ORIGINS = [o.strip() for o in CORS_ORIGINS_ENV.split(",") if o.strip()]
 
 manager = ProviderManager()
 cache = ResponseCache()
 rate_limiter = RateLimiter()
+
+
+# ── Dashboard Session Manager ───────────────────────
+class SessionManager:
+    """In-memory session store with TTL. Tokens are cryptographically random."""
+
+    def __init__(self, ttl_hours: int = 24):
+        self._sessions: dict = {}  # token -> expiry timestamp
+        self._lock = threading.Lock()
+        self._ttl = ttl_hours * 3600
+
+    def create(self) -> str:
+        """Create a new session, returns token."""
+        token = secrets.token_hex(32)
+        with self._lock:
+            self._sessions[token] = time.time() + self._ttl
+        return token
+
+    def validate(self, token: str) -> bool:
+        """Check if token is valid and not expired."""
+        if not token:
+            return False
+        with self._lock:
+            expiry = self._sessions.get(token)
+            if expiry is None:
+                return False
+            if time.time() > expiry:
+                del self._sessions[token]
+                return False
+            return True
+
+    def revoke(self, token: str) -> None:
+        with self._lock:
+            self._sessions.pop(token, None)
+
+    def cleanup(self) -> None:
+        """Remove expired sessions."""
+        now = time.time()
+        with self._lock:
+            expired = [t for t, exp in self._sessions.items() if now > exp]
+            for t in expired:
+                del self._sessions[t]
+
+
+session_manager = SessionManager()
 
 
 # ── FastAPI App ─────────────────────────────────────
@@ -524,13 +671,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — restrict to localhost by default
+# CORS — restrict to localhost by default (tighten: no wildcard methods/headers)
+_allowed_methods = ["GET", "POST", "OPTIONS"]
+_allowed_headers = ["Authorization", "Content-Type", "Accept"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_allowed_methods,
+    allow_headers=_allowed_headers,
 )
 
 
@@ -539,12 +688,17 @@ app.add_middleware(
 async def auth_and_rate_limit(request: Request, call_next):
     path = request.url.path
 
-    # Skip auth for health, static, dashboard UI, dashboard API
-    if path == "/health" or path.startswith("/static"):
+    # Skip auth for health check
+    if path == "/health":
         return await call_next(request)
 
-    # Dashboard pages and API — no auth, but rate limit
+    # Skip auth for login endpoint
+    if path == "/api/auth/login" or path == "/api/auth/status":
+        return await call_next(request)
+
+    # Dashboard pages and API — check session if auth enabled
     if path == "/" or path.startswith("/api/"):
+        # Rate limit first
         client_ip = request.client.host if request.client else "unknown"
         if not rate_limiter.is_allowed(client_ip):
             wait = rate_limiter.get_wait_time(client_ip)
@@ -558,9 +712,28 @@ async def auth_and_rate_limit(request: Request, call_next):
                     }
                 },
             )
+
+        # Dashboard auth check
+        if DASHBOARD_AUTH_ENABLED:
+            token = _extract_session_token(request)
+            if not session_manager.validate(token):
+                # Allow the login page HTML to load
+                if path == "/":
+                    return await call_next(request)
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {
+                            "message": "Dashboard requires login",
+                            "type": "authentication_error",
+                            "code": "dashboard_auth_required",
+                        }
+                    },
+                )
+
         return await call_next(request)
 
-    # /v1/* endpoints — auth + rate limit
+    # /v1/* endpoints — proxy auth + rate limit
     if path.startswith("/v1/"):
         if ROUTERAI_API_KEY:
             auth = request.headers.get("Authorization", "")
@@ -594,6 +767,20 @@ async def auth_and_rate_limit(request: Request, call_next):
             )
 
     return await call_next(request)
+
+
+def _extract_session_token(request: Request) -> str:
+    """Extract session token from cookie or Authorization header."""
+    # Check cookie first
+    token = request.cookies.get("routerai_session")
+    if token:
+        return token
+    # Check Authorization header (Bearer token)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    # Check query param
+    return request.query_params.get("session", "")
 
 
 # ══════════════════════════════════════════════════════
@@ -656,81 +843,144 @@ async def chat_completions(request: Request):
             return StreamingResponse(_stream_from_cache(cached), media_type="text/event-stream")
         return cached
 
-    # Try providers with failover + exponential retry
-    tried = set()
-    max_retries = manager.config.get("max_retries", 3)
+    # Try providers with exponential backoff retry per provider, then failover
+    # Strategy: retry same provider 3 times (delay 1s→2s→4s), then move to next provider
+    import asyncio
+
+    max_retries_per_provider = manager.config.get("max_retries", 3)
+    tried_providers: set = set()
     last_error = None
 
-    for attempt in range(max_retries):
+    while True:
+        # Pick next untried provider
         provider, model = manager.resolve_model(requested_model)
         if not provider or not model:
             break
 
-        if provider["id"] in tried:
+        if provider["id"] in tried_providers:
             available = manager.get_available_providers()
             found = False
             for p in available:
-                if p["id"] not in tried:
+                if p["id"] not in tried_providers:
                     provider, model = p, p["models"][0]
                     found = True
                     break
             if not found:
                 break
 
-        tried.add(provider["id"])
+        tried_providers.add(provider["id"])
         api_key = manager.get_api_key(provider["id"])
 
-        try:
-            start_time = time.time()
+        # Retry current provider with exponential backoff
+        for retry_idx in range(max_retries_per_provider):
+            try:
+                start_time = time.time()
 
-            if stream:
-                return StreamingResponse(
-                    _stream_request(provider, model, body, api_key, messages, requested_model),
-                    media_type="text/event-stream",
+                if stream and retry_idx == 0:
+                    # Only stream on first attempt (re-streaming is messy)
+                    return StreamingResponse(
+                        _stream_request(provider, model, body, api_key, messages, requested_model),
+                        media_type="text/event-stream",
+                    )
+
+                result = _make_request(provider, model, body, api_key)
+                latency = int((time.time() - start_time) * 1000)
+
+                if "error" in result:
+                    raise Exception(result.get("error", {}).get("message", "Unknown error"))
+
+                manager.report_success(provider["id"])
+                usage = result.get("usage", {})
+                manager.stats.record(
+                    provider["id"],
+                    model["id"],
+                    usage.get("prompt_tokens", 0),
+                    usage.get("completion_tokens", 0),
+                    latency,
+                    True,
                 )
+                cache.set(messages, requested_model, result)
+                return result
 
-            result = _make_request(provider, model, body, api_key)
-            latency = int((time.time() - start_time) * 1000)
+            except httpx.HTTPStatusError as e:
+                last_error = str(e)
+                status = e.response.status_code if e.response else 0
 
-            if "error" in result:
-                raise Exception(result.get("error", {}).get("message", "Unknown error"))
+                if status == 429:
+                    # Rate limited: respect Retry-After header, then retry same provider
+                    retry_after = float(e.response.headers.get("Retry-After", 2 ** retry_idx))
+                    wait_time = min(retry_after, 30)  # cap at 30s
+                    log.warning(
+                        f"429 Rate limited by {provider['id']} "
+                        f"(retry {retry_idx + 1}/{max_retries_per_provider}), "
+                        f"waiting {wait_time:.1f}s (Retry-After header)"
+                    )
+                    if retry_idx < max_retries_per_provider - 1:
+                        await asyncio.sleep(wait_time)
+                        continue  # retry same provider
+                    else:
+                        log.warning(f"429 max retries reached for {provider['id']}, switching provider")
+                        break  # move to next provider
 
-            manager.report_success(provider["id"])
-            usage = result.get("usage", {})
-            manager.stats.record(
-                provider["id"],
-                model["id"],
-                usage.get("prompt_tokens", 0),
-                usage.get("completion_tokens", 0),
-                latency,
-                True,
-            )
-            cache.set(messages, requested_model, result)
-            return result
+                elif status in (500, 502, 503, 504):
+                    # Server error: retry with exponential backoff (1s, 2s, 4s)
+                    delay = min(2 ** retry_idx, 8)  # 1s, 2s, 4s, cap 8s
+                    log.warning(
+                        f"{status} Server error from {provider['id']} "
+                        f"(retry {retry_idx + 1}/{max_retries_per_provider}), "
+                        f"waiting {delay}s"
+                    )
+                    manager.report_error(provider["id"], last_error)
+                    if retry_idx < max_retries_per_provider - 1:
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        manager.stats.record(
+                            provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error
+                        )
+                        break  # move to next provider
 
-        except httpx.HTTPStatusError as e:
-            last_error = str(e)
-            if e.response.status_code == 429:
-                retry_after = float(e.response.headers.get("Retry-After", 2))
-                log.warning(f"Rate limited by {provider['id']}, waiting {retry_after}s")
-                import asyncio
+                else:
+                    # Client error (400, 401, 403, etc.) — don't retry, switch provider
+                    log.error(f"{status} Client error from {provider['id']}: {last_error}")
+                    manager.report_error(provider["id"], last_error)
+                    manager.stats.record(
+                        provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error
+                    )
+                    break  # move to next provider
 
-                await asyncio.sleep(min(retry_after, 5))
-                tried.discard(provider["id"])
-                continue
-            manager.report_error(provider["id"], last_error)
-            manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error)
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+                last_error = f"Timeout: {e}"
+                delay = min(2 ** retry_idx, 8)
+                log.warning(
+                    f"Timeout from {provider['id']} "
+                    f"(retry {retry_idx + 1}/{max_retries_per_provider}), "
+                    f"waiting {delay}s"
+                )
+                manager.report_error(provider["id"], last_error)
+                if retry_idx < max_retries_per_provider - 1:
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    manager.stats.record(
+                        provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error
+                    )
+                    break  # move to next provider
 
-        except Exception as e:
-            last_error = str(e)
-            manager.report_error(provider["id"], last_error)
-            manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error)
+            except Exception as e:
+                last_error = str(e)
+                log.error(f"Error from {provider['id']}: {last_error}")
+                manager.report_error(provider["id"], last_error)
+                manager.stats.record(
+                    provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error
+                )
+                break  # move to next provider (non-retryable error)
 
     return JSONResponse(
         status_code=503,
         content={
             "error": {
-                "message": f"ทุก provider ล้มเหลว ({len(tried)} ตัว): {last_error or 'no providers available'}",
+                "message": f"ทุก provider ล้มเหลว ({len(tried_providers)} ตัว): {last_error or 'no providers available'}",
                 "type": "all_providers_failed",
                 "code": "provider_exhausted",
             }
@@ -810,7 +1060,7 @@ def _make_request(provider, model, body, api_key):
     payload["model"] = model["id"]
     payload["stream"] = False
 
-    timeout = manager.config.get("timeout", 60)
+    timeout = manager.config.get("timeout", 30)
     client = get_http_client(timeout)
     resp = client.post(url, json=payload, headers=headers)
     resp.raise_for_status()
@@ -832,7 +1082,7 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
     full_response = ""
 
     try:
-        stream_timeout = manager.config.get("timeout", 60) * 2  # streaming ใช้ 2x timeout
+        stream_timeout = manager.config.get("stream_timeout", 60)
         async with httpx.AsyncClient(timeout=stream_timeout) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as resp:
                 resp.raise_for_status()
@@ -854,6 +1104,18 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
         latency = int((time.time() - start_time) * 1000)
         manager.report_success(provider["id"])
         manager.stats.record(provider["id"], model["id"], 0, len(full_response), latency, True)
+
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code if e.response else 0
+        log.warning(f"Stream HTTP {status} from {provider['id']}: {e}")
+        manager.report_error(provider["id"], str(e))
+        manager.stats.record(provider["id"], model["id"], 0, 0, 0, False, str(e))
+        if status == 429:
+            error_msg = f"Rate limited by {provider['id']}. Retry-After: {e.response.headers.get('Retry-After', '?')}s"
+        else:
+            error_msg = str(e)
+        error_chunk = {"error": {"message": error_msg, "type": "stream_error", "code": status}}
+        yield f"data: {json.dumps(error_chunk)}\n\n"
 
     except Exception as e:
         log.warning(f"Stream error from {provider['id']}: {e}")
@@ -957,9 +1219,35 @@ async def api_providers():
 @app.post("/api/keys")
 async def api_save_keys(request: Request):
     data = await request.json()
-    manager.save_api_keys(data)
-    manager.reload()
+    # Filter out masked values (user didn't change them)
+    filtered = {}
+    masked_keys = key_store.get_masked_keys()
+    for k, v in data.items():
+        v = v.strip()
+        if not v:
+            continue
+        if v == masked_keys.get(k):
+            continue  # User didn't change this key — keep existing
+        filtered[k] = v
+    if filtered:
+        manager.save_api_keys(filtered)
+        manager.reload()
     return {"status": "ok", "message": "บันทึก API Key เรียบร้อย ✅"}
+
+
+@app.get("/api/keys/masked")
+async def api_masked_keys():
+    """Return masked API keys for safe display in Dashboard."""
+    masked = key_store.get_masked_keys()
+    env_masked = {}
+    for pid, provider in manager.providers.items():
+        env_key = provider.get("api_key_env")
+        if env_key:
+            # Check env var too
+            env_val = os.environ.get(env_key)
+            if env_val and env_key not in masked:
+                env_masked[env_key] = mask_key(env_val)
+    return {"keys": {**masked, **env_masked}, "encrypted": key_store.is_encrypted()}
 
 
 @app.get("/api/config")
@@ -1252,6 +1540,58 @@ async def api_playground_chat(request: Request):
         }
     except Exception as e:
         return {"success": False, "error": str(e), "latency_ms": 0}
+
+
+# ── Auth Endpoints ──────────────────────────────────
+@app.post("/api/auth/login")
+async def api_login(request: Request):
+    """Login with dashboard password. Returns session token."""
+    if not DASHBOARD_AUTH_ENABLED:
+        return {"status": "ok", "message": "Auth not enabled", "token": ""}
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Request must be JSON"})
+
+    password = data.get("password", "")
+    if not password:
+        return JSONResponse(status_code=400, content={"error": "กรุณาใส่รหัสผ่าน"})
+
+    if not secrets.compare_digest(password.encode(), DASHBOARD_PASSWORD.encode()):
+        return JSONResponse(status_code=401, content={"error": "รหัสผ่านไม่ถูกต้อง"})
+
+    token = session_manager.create()
+    resp = JSONResponse(content={"status": "ok", "message": "เข้าสู่ระบบสำเร็จ ✅", "token": token})
+    resp.set_cookie(
+        key="routerai_session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=86400,  # 24h
+        secure=False,  # Set True behind HTTPS
+    )
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request):
+    """Logout — revoke session token."""
+    token = _extract_session_token(request)
+    if token:
+        session_manager.revoke(token)
+    resp = JSONResponse(content={"status": "ok", "message": "ออกจากระบบแล้ว"})
+    resp.delete_cookie("routerai_session")
+    return resp
+
+
+@app.get("/api/auth/status")
+async def api_auth_status():
+    """Check if dashboard auth is enabled."""
+    return {
+        "auth_enabled": DASHBOARD_AUTH_ENABLED,
+        "cors_origins": CORS_ORIGINS,
+    }
 
 
 # ── Health Check ────────────────────────────────────

@@ -2,3 +2,4 @@ httpx[http2]>=0.27
 fastapi>=0.115
 uvicorn[standard]>=0.34
 gunicorn>=22.0
+cryptography>=42.0

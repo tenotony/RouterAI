@@ -43,3 +43,8 @@ coverage.xml
 
 # Environment
 .env
+
+# Data & secrets
+data/
+api_keys.json
+.encryption_key

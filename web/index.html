@@ -693,6 +693,21 @@ select.form-input { cursor: pointer; }
 </head>
 <body>
 
+<!-- Login Overlay -->
+<div id="login-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.85); backdrop-filter:blur(12px); align-items:center; justify-content:center;">
+  <div style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:40px; width:380px; max-width:90vw; text-align:center;">
+    <div style="font-size:2.5rem; margin-bottom:12px;">🔀</div>
+    <h2 style="font-size:1.3rem; font-weight:700; margin-bottom:4px;">RouterAI Login</h2>
+    <p style="color:var(--text2); font-size:0.85rem; margin-bottom:24px;">ใส่รหัสผ่านเพื่อเข้าสู่ Dashboard</p>
+    <form onsubmit="event.preventDefault(); doLogin();" style="display:flex; flex-direction:column; gap:12px;">
+      <input type="password" id="login-password" class="form-input" placeholder="รหัสผ่าน..." autofocus style="text-align:center; font-size:1rem; padding:12px;">
+      <button type="submit" class="btn btn-primary" style="width:100%; padding:12px;">🔓 เข้าสู่ระบบ</button>
+      <p id="login-error" style="color:var(--red); font-size:0.8rem; min-height:1.2em;"></p>
+    </form>
+    <p style="color:var(--text3); font-size:0.7rem; margin-top:16px;">ตั้งค่าด้วย env: ROUTERAI_DASHBOARD_PASSWORD</p>
+  </div>
+</div>
+
 <!-- Sidebar -->
 <nav class="sidebar">
   <div class="sidebar-header">
@@ -741,6 +756,11 @@ select.form-input { cursor: pointer; }
     </a>
     <a class="nav-item" data-page="install">
       <span class="nav-icon">📦</span><span class="nav-text">คู่มือติดตั้ง</span>
+    </a>
+  </div>
+  <div id="sidebar-logout" style="display:none; padding:12px 20px; border-top:1px solid var(--border);">
+    <a class="nav-item" onclick="doLogout()" style="cursor:pointer;">
+      <span class="nav-icon">🚪</span><span class="nav-text">ออกจากระบบ</span>
     </a>
   </div>
   <div class="sidebar-footer">
@@ -1363,9 +1383,15 @@ async function loadProviders() {
 // ── Keys Page ──
 async function loadKeysForm() {
   try {
-    const res = await fetch('/api/providers');
-    const data = await res.json();
-    providersData = data.providers || [];
+    const [provRes, keysRes] = await Promise.all([
+      fetch('/api/providers'),
+      fetch('/api/keys/masked')
+    ]);
+    const provData = await provRes.json();
+    const keysData = await keysRes.json();
+    providersData = provData.providers || [];
+    const maskedKeys = keysData.keys || {};
+    const isEncrypted = keysData.encrypted;
 
     const envMap = {
       groq: 'GROQ_API_KEY', mimo: 'MIMO_API_KEY', google: 'GOOGLE_API_KEY',
@@ -1379,6 +1405,7 @@ async function loadKeysForm() {
       .filter(p => p.id !== 'ollama')
       .map(p => {
         const key = envMap[p.id] || p.id.toUpperCase() + '_API_KEY';
+        const maskedVal = maskedKeys[key] || '';
         return `
           <div class="key-row">
             <div class="key-provider">
@@ -1389,7 +1416,7 @@ async function loadKeysForm() {
               </div>
             </div>
             <div class="key-input-wrap">
-              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key..." data-key="${key}">
+              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key..." data-key="${key}" value="${maskedVal}">
               <a href="${p.signup_url}" target="_blank" class="btn btn-ghost btn-sm">สมัคร</a>
             </div>
             <div>
@@ -1397,7 +1424,11 @@ async function loadKeysForm() {
             </div>
           </div>
         `;
-      }).join('');
+      }).join('') + `
+        <div style="margin-top:8px; font-size:0.75rem; color:var(--text3);">
+          ${isEncrypted ? '🔒 Keys เข้ารหัสแล้ว (AES)' : '⚠️ Keys เก็บเป็น plaintext — ติดตั้ง cryptography library เพื่อเข้ารหัส'}
+        </div>
+      `;
   } catch(e) {
     toast('โหลดฟอร์มล้มเหลว', 'error');
   }
@@ -1907,8 +1938,102 @@ function fmtNum(n) {
   return String(n);
 }
 
+// ── Auth ──
+let sessionToken = '';
+let authEnabled = false;
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/status');
+    const data = await res.json();
+    authEnabled = data.auth_enabled || false;
+    if (!authEnabled) return true;
+
+    // Auth is enabled — try to use stored token or cookie
+    const stored = localStorage.getItem('routerai_session');
+    if (stored) {
+      sessionToken = stored;
+      // Validate by hitting an API endpoint
+      const testRes = await fetch('/api/status', {
+        headers: sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}
+      });
+      if (testRes.ok) return true;
+    }
+    showLogin();
+    return false;
+  } catch(e) {
+    return true; // If can't check auth, proceed anyway
+  }
+}
+
+function showLogin() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('sidebar-logout').style.display = 'none';
+}
+
+function hideLogin() {
+  document.getElementById('login-overlay').style.display = 'none';
+  if (authEnabled) document.getElementById('sidebar-logout').style.display = 'block';
+}
+
+async function doLogin() {
+  const pwd = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  if (!pwd) { errEl.textContent = 'กรุณาใส่รหัสผ่าน'; return; }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) {
+      sessionToken = data.token;
+      localStorage.setItem('routerai_session', data.token);
+      errEl.textContent = '';
+      hideLogin();
+      toast('เข้าสู่ระบบสำเร็จ ✅');
+      loadDashboard();
+    } else {
+      errEl.textContent = data.error || 'Login failed';
+    }
+  } catch(e) {
+    errEl.textContent = 'เชื่อมต่อไม่ได้';
+  }
+}
+
+async function doLogout() {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}
+    });
+  } catch(e) {}
+  sessionToken = '';
+  localStorage.removeItem('routerai_session');
+  toast('ออกจากระบบแล้ว');
+  if (authEnabled) showLogin();
+}
+
+// Patch fetch to include auth token
+const _origFetch = window.fetch;
+window.fetch = function(url, opts = {}) {
+  if (sessionToken && typeof url === 'string') {
+    opts.headers = opts.headers || {};
+    if (opts.headers instanceof Headers) {
+      opts.headers.set('Authorization', `Bearer ${sessionToken}`);
+    } else {
+      opts.headers['Authorization'] = `Bearer ${sessionToken}`;
+    }
+  }
+  return _origFetch.call(this, url, opts);
+};
+
 // ── Init ──
-loadDashboard();
+(async () => {
+  const ok = await checkAuth();
+  if (ok) loadDashboard();
+})();
 </script>
 </body>
 </html>
