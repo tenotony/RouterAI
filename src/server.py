@@ -35,6 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # ── Config ──────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
 PROVIDERS_FILE = BASE_DIR / "providers.json"
+CUSTOM_PROVIDERS_FILE = BASE_DIR / "data" / "custom_providers.json"
 API_KEYS_FILE = BASE_DIR / "api_keys.json"
 ENCRYPTION_KEY_FILE = BASE_DIR / "data" / ".encryption_key"
 PROXY_CONFIG_FILE = BASE_DIR / "proxy_config.json"
@@ -65,7 +66,22 @@ def load_json_file(path: Path, default=None):
 
 
 def load_providers():
-    return load_json_file(PROVIDERS_FILE, {})
+    """Load built-in + custom providers, merged together."""
+    built_in = load_json_file(PROVIDERS_FILE, {})
+    custom = load_json_file(CUSTOM_PROVIDERS_FILE, {})
+    # Custom providers override built-in if same ID
+    merged = {**built_in, **custom}
+    return merged
+
+
+def load_custom_providers():
+    """Load only user-added custom providers."""
+    return load_json_file(CUSTOM_PROVIDERS_FILE, {})
+
+
+def save_custom_providers(providers: dict):
+    """Save custom providers to separate file."""
+    save_json_file(CUSTOM_PROVIDERS_FILE, providers)
 
 
 def load_api_keys():
@@ -876,10 +892,11 @@ async def chat_completions(request: Request):
             try:
                 start_time = time.time()
 
-                if stream and retry_idx == 0:
-                    # Only stream on first attempt (re-streaming is messy)
+                if stream:
+                    # Streaming with failover: wrap in generator that catches errors
+                    remaining = [p for p in manager.get_available_providers() if p["id"] not in tried_providers]
                     return StreamingResponse(
-                        _stream_request(provider, model, body, api_key, messages, requested_model),
+                        _stream_with_failover(provider, model, body, api_key, messages, requested_model, remaining),
                         media_type="text/event-stream",
                     )
 
@@ -1125,6 +1142,38 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
         yield f"data: {json.dumps(error_chunk)}\n\n"
 
 
+async def _stream_with_failover(provider, model, body, api_key, messages, requested_model, fallback_providers):
+    """Stream with automatic failover to next provider on error."""
+    try:
+        async for chunk in _stream_request(provider, model, body, api_key, messages, requested_model):
+            yield chunk
+        return  # Stream succeeded
+    except Exception as e:
+        log.warning(f"Stream failover from {provider['id']}: {e}")
+
+    # Try fallback providers
+    for fb_provider in fallback_providers:
+        fb_model = fb_provider["models"][0] if fb_provider.get("models") else None
+        if not fb_model:
+            continue
+        fb_key = manager.get_api_key(fb_provider["id"])
+        if not fb_key:
+            continue
+        log.info(f"Stream failover: trying {fb_provider['id']}")
+        try:
+            async for chunk in _stream_request(fb_provider, fb_model, body, fb_key, messages, requested_model):
+                yield chunk
+            return  # Fallback succeeded
+        except Exception as e2:
+            log.warning(f"Stream failover {fb_provider['id']} also failed: {e2}")
+            continue
+
+    # All providers failed
+    error_chunk = {"error": {"message": "All providers failed for streaming", "type": "provider_exhausted"}}
+    yield f"data: {json.dumps(error_chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+
+
 async def _stream_from_cache(cached):
     """Convert cached response to SSE stream."""
     import asyncio
@@ -1278,6 +1327,93 @@ async def api_cache_stats():
     return cache.get_stats()
 
 
+# ── Custom Provider Management ──────────────────────
+@app.get("/api/providers/custom")
+async def api_get_custom_providers():
+    """List user-added custom providers."""
+    custom = load_custom_providers()
+    result = []
+    for pid, pdata in custom.items():
+        env_key = pdata.get("api_key_env")
+        has_key = bool(env_key and (manager.api_keys.get(env_key) or os.environ.get(env_key))) if env_key else True
+        result.append({
+            "id": pid,
+            "name": pdata.get("name", pid),
+            "api_base": pdata.get("api_base", ""),
+            "has_key": has_key,
+            "models": pdata.get("models", []),
+            "speed": pdata.get("speed", ""),
+            "signup_url": pdata.get("signup_url", ""),
+            "desc": pdata.get("desc", ""),
+            "flag": pdata.get("flag", "🌐"),
+            "custom": True,
+        })
+    return {"providers": result}
+
+
+@app.post("/api/providers/custom")
+async def api_add_custom_provider(request: Request):
+    """Add or update a custom provider."""
+    data = await request.json()
+    pid = data.get("id", "").strip().lower().replace(" ", "-")
+    if not pid:
+        return JSONResponse(status_code=400, content={"error": "ต้องใส่ Provider ID"})
+
+    # Validate required fields
+    api_base = data.get("api_base", "").strip().rstrip("/")
+    if not api_base:
+        return JSONResponse(status_code=400, content={"error": "ต้องใส่ API Base URL"})
+
+    models = data.get("models", [])
+    if not models:
+        return JSONResponse(status_code=400, content={"error": "ต้องใส่อย่างน้อย 1 โมเดล"})
+
+    # Build provider config
+    api_key_env = data.get("api_key_env", f"CUSTOM_{pid.upper()}_API_KEY")
+    provider_config = {
+        "name": data.get("name", pid),
+        "api_base": api_base,
+        "api_key_env": api_key_env if data.get("needs_key", True) else None,
+        "models": [
+            {
+                "id": m.get("id", m) if isinstance(m, dict) else m,
+                "context": m.get("context", 4096) if isinstance(m, dict) else 4096,
+                "free": m.get("free", False) if isinstance(m, dict) else False,
+                "priority": m.get("priority", 50) if isinstance(m, dict) else 50,
+                "desc": m.get("desc", "") if isinstance(m, dict) else "",
+            }
+            for m in models
+        ],
+        "speed": data.get("speed", "⚡⚡⚡"),
+        "signup_url": data.get("signup_url", ""),
+        "desc": data.get("desc", ""),
+        "flag": data.get("flag", "🌐"),
+        "custom": True,
+    }
+
+    custom = load_custom_providers()
+    custom[pid] = provider_config
+    save_custom_providers(custom)
+    manager.reload()
+
+    return {"status": "ok", "message": f"เพิ่ม Provider '{provider_config['name']}' สำเร็จ ✅", "id": pid}
+
+
+@app.delete("/api/providers/custom/{provider_id}")
+async def api_delete_custom_provider(provider_id: str):
+    """Delete a custom provider."""
+    custom = load_custom_providers()
+    if provider_id not in custom:
+        return JSONResponse(status_code=404, content={"error": "ไม่พบ custom provider นี้"})
+
+    name = custom[provider_id].get("name", provider_id)
+    del custom[provider_id]
+    save_custom_providers(custom)
+    manager.reload()
+
+    return {"status": "ok", "message": f"ลบ Provider '{name}' สำเร็จ 🗑️"}
+
+
 @app.post("/api/openclaw-config")
 async def api_openclaw_config(request: Request):
     data = await request.json()
@@ -1303,6 +1439,38 @@ async def api_openclaw_config(request: Request):
 @app.get("/api/stats")
 async def api_stats(days: int = 7):
     return manager.stats.get_summary(days=days)
+
+
+@app.get("/api/stats/latency")
+async def api_latency_stats(days: int = 7):
+    """Per-provider latency stats for smart routing decisions."""
+    manager.stats._ensure_conn()
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    with manager.stats._lock:
+        cur = manager.stats._conn.execute(
+            "SELECT provider, "
+            "AVG(latency_ms) as avg_ms, "
+            "MIN(latency_ms) as min_ms, "
+            "MAX(latency_ms) as max_ms, "
+            "COUNT(*) as total, "
+            "SUM(success) as successes, "
+            "SUM(CASE WHEN latency_ms < 1000 THEN 1 ELSE 0 END) as fast_count "
+            "FROM requests WHERE ts > ? GROUP BY provider ORDER BY avg_ms",
+            (cutoff,),
+        )
+        results = []
+        for row in cur.fetchall():
+            total = row[4] or 1
+            results.append({
+                "provider": row[0],
+                "avg_latency_ms": round(row[1] or 0),
+                "min_latency_ms": row[2] or 0,
+                "max_latency_ms": row[3] or 0,
+                "total_requests": total,
+                "success_rate": round((row[5] or 0) / total * 100, 1),
+                "fast_rate": round((row[6] or 0) / total * 100, 1),
+            })
+    return {"period_days": days, "providers": results}
 
 
 @app.post("/api/test/{provider_id}")

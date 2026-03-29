@@ -43,9 +43,10 @@
 - [x] Docker Compose setup
 
 ### 1.3 Error Handling
-- [ ] เพิ่ม retry with exponential backoff (ตอนนี้ failover แต่ไม่ retry provider เดิม)
-- [ ] จัดการ rate limit response (429) — รอแล้ว retry หรือ switch provider
-- [ ] จัดการ timeout ให้ดีขึ้น — ตอนนี้ streaming timeout = 120s (นานไป)
+- [x] เพิ่ม retry with exponential backoff ✅
+- [x] จัดการ rate limit response (429) — รอแล้ว retry หรือ switch provider ✅
+- [x] จัดการ timeout ให้ดีขึ้น ✅
+- [x] Streaming failover — stream แตกแล้วลอง provider ถัดไป ✅
 
 ---
 
@@ -53,33 +54,18 @@
 > **ระยะเวลา:** 1-2 สัปดาห์
 
 ### 2.1 API Authentication
-ตอนนี้ proxy ไม่มี auth — ใครรู้ IP ก็ใช้ได้
+ตอนนี้ proxy มี auth แล้ว ✅
 
-```python
-# สิ่งที่ต้องทำ:
-# 1. เพิ่ม Bearer token authentication
-# 2. Dashboard สร้าง token อัตโนมัติ
-# 3. OpenClaw config ใส่ token แทน "routerai"
-
-@app.before_request
-def check_auth():
-    if request.endpoint in ('health', 'static'):
-        return
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    if token != VALID_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 401
-```
-
-- [ ] เพิ่ม API key authentication สำหรับ proxy endpoint
-- [ ] Dashboard login (password หรือ token-based)
+- [x] เพิ่ม API key authentication สำหรับ proxy endpoint ✅
+- [x] Dashboard login (password หรือ token-based) ✅
 - [ ] HTTPS support (auto SSL ด้วย Caddy หรือ nginx)
-- [ ] Rate limiting per client IP
+- [x] Rate limiting per client IP ✅
 - [ ] CORS policy ที่เข้มงวดขึ้น (ตอนนี้เปิดทุก origin)
 
 ### 2.2 API Key Security
-- [ ] เข้ารหัส API keys ใน `api_keys.json` (ตอนนี้เก็บเป็น plaintext)
-- [ ] ไม่แสดง API key เต็มใน Dashboard (แสดงแค่ 4 ตัวท้าย)
-- [ ] Environment variables มี priority สูงกว่าไฟล์ (✅ ทำแล้ว)
+- [x] เข้ารหัส API keys ใน `api_keys.json` (Fernet/AES) ✅
+- [x] ไม่แสดง API key เต็มใน Dashboard (แสดงแค่ 4 ตัวท้าย) ✅
+- [x] Environment variables มี priority สูงกว่าไฟล์ ✅
 
 ---
 
@@ -131,10 +117,10 @@ def check_auth():
 - [ ] Most used models ranking
 
 ### 4.2 Model Management
-- [ ] เพิ่ม/ลบ/แก้ไขโมเดลจาก Dashboard (ตอนนี้แก้ใน providers.json)
-- [ ] Custom provider (ใส่ API base URL + key เอง)
-- [ ] Model comparison tool — ส่งคำถามเดียวกันไปหลาย model พร้อมกัน
-- [ ] Prompt testing playground (เหมือน OpenAI Playground)
+- [x] เพิ่ม/ลบ/แก้ไข Custom Provider จาก Dashboard ✅
+- [x] Custom provider (ใส่ API base URL + key เอง) ✅
+- [x] Model comparison tool — ส่งคำถามเดียวกันไปหลาย model พร้อมกัน ✅
+- [x] Prompt testing playground (เหมือน OpenAI Playground) ✅
 
 ### 4.3 User Management (Multi-user)
 - [ ] User accounts (admin/user roles)
@@ -183,8 +169,8 @@ def check_auth():
 
 ### 6.1 Performance
 - [x] ~~เปลี่ยนจาก Flask → FastAPI~~ ✅ ทำแล้ว
-- [ ] เปลี่ยนจาก file-based stats → SQLite หรือ PostgreSQL
-- [ ] Connection pooling สำหรับ HTTP clients
+- [x] เปลี่ยนจาก file-based stats → SQLite ✅
+- [x] Connection pooling สำหรับ HTTP clients ✅
 - [ ] Streaming performance optimization
 
 ### 6.2 Deployment
@@ -234,7 +220,7 @@ def check_auth():
 
 ### Code Quality
 - [ ] เพิ่ม type hints ทั้งหมด (Python typing)
-- [ ] เพิ่ม unit tests (pytest)
+- [x] เพิ่ม unit tests (pytest) — 33 tests ✅
 - [ ] เพิ่ม integration tests
 - [ ] Code formatting (black, isort)
 - [ ] Linting (ruff, mypy)

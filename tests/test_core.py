@@ -322,6 +322,78 @@ class TestAuth:
                 assert resp.status_code == 200
 
 
+# ── Test: Custom Providers ──────────────────────────
+
+class TestCustomProviders:
+    """Test custom provider CRUD."""
+
+    def test_get_custom_providers_empty(self, client):
+        resp = client.get("/api/providers/custom")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "providers" in data
+
+    def test_add_custom_provider(self, client):
+        resp = client.post("/api/providers/custom", json={
+            "id": "test-provider",
+            "name": "Test Provider",
+            "api_base": "http://localhost:9999/v1",
+            "models": [{"id": "test-model", "context": 4096, "free": True}],
+            "desc": "Test",
+            "flag": "🧪",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == "test-provider"
+
+    def test_add_custom_provider_missing_fields(self, client):
+        # Missing api_base
+        resp = client.post("/api/providers/custom", json={
+            "id": "bad",
+            "name": "Bad",
+            "models": [{"id": "m"}],
+        })
+        assert resp.status_code == 400
+
+        # Missing models
+        resp = client.post("/api/providers/custom", json={
+            "id": "bad2",
+            "name": "Bad2",
+            "api_base": "http://localhost:9999/v1",
+            "models": [],
+        })
+        assert resp.status_code == 400
+
+    def test_delete_custom_provider(self, client):
+        # Add first
+        client.post("/api/providers/custom", json={
+            "id": "to-delete",
+            "name": "To Delete",
+            "api_base": "http://localhost:9999/v1",
+            "models": [{"id": "m"}],
+        })
+        # Delete
+        resp = client.delete("/api/providers/custom/to-delete")
+        assert resp.status_code == 200
+
+    def test_delete_nonexistent_custom_provider(self, client):
+        resp = client.delete("/api/providers/custom/nonexistent-xyz")
+        assert resp.status_code == 404
+
+
+# ── Test: Latency Stats ────────────────────────────
+
+class TestLatencyStats:
+    """Test latency statistics endpoint."""
+
+    def test_latency_stats_empty(self, client):
+        resp = client.get("/api/stats/latency")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "providers" in data
+        assert "period_days" in data
+
+
 # ── Test: Provider Manager ──────────────────────────
 
 class TestProviderManager:

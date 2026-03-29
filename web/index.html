@@ -731,6 +731,9 @@ select.form-input { cursor: pointer; }
     <a class="nav-item" data-page="search">
       <span class="nav-icon">🔍</span><span class="nav-text">ค้นหา API ฟรี</span>
     </a>
+    <a class="nav-item" data-page="custom-providers">
+      <span class="nav-icon">🛠️</span><span class="nav-text">Custom Provider</span>
+    </a>
     <a class="nav-item" data-page="keys">
       <span class="nav-icon">🔑</span><span class="nav-text">จัดการ API Key</span>
     </a>
@@ -1116,6 +1119,97 @@ select.form-input { cursor: pointer; }
     </div>
   </div>
 
+  <!-- ═══ Page: Custom Providers ═══ -->
+  <div class="page" id="page-custom-providers">
+    <div class="page-header">
+      <div class="page-title">🛠️ Custom Provider</div>
+      <div class="page-subtitle">เพิ่ม AI Provider ของคุณเอง — รองรับ OpenAI-compatible API ทุกเจ้า</div>
+    </div>
+
+    <!-- Existing Custom Providers -->
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:12px; font-size:1rem;">📋 Custom Providers ที่เพิ่มแล้ว</h3>
+      <div id="custom-providers-list">
+        <div style="text-align:center; color:var(--text3); padding:20px;">⏳ กำลังโหลด...</div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Form -->
+    <div class="card">
+      <h3 style="margin-bottom:16px; font-size:1rem;">➕ เพิ่ม Provider ใหม่</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Provider ID *</label>
+          <input class="form-input" id="cp-id" placeholder="เช่น my-llm, local-ollama" pattern="[a-z0-9-]+">
+          <div class="form-hint">ตัวพิมพ์เล็ก, ตัวเลข, ขีดกลาง เท่านั้น</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ชื่อที่แสดง *</label>
+          <input class="form-input" id="cp-name" placeholder="เช่น My LLM Server">
+        </div>
+        <div class="form-group" style="flex:0; width:80px;">
+          <label class="form-label">ธง</label>
+          <input class="form-input" id="cp-flag" value="🌐" style="text-align:center; font-size:1.2rem;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Base URL *</label>
+        <input class="form-input" id="cp-api-base" placeholder="เช่น https://api.example.com/v1 หรือ http://localhost:11434/v1">
+        <div class="form-hint">ต้องรองรับ OpenAI-compatible API (/chat/completions)</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">API Key Env Var</label>
+          <input class="form-input" id="cp-api-key-env" placeholder="เช่น MY_LLM_API_KEY">
+          <div class="form-hint">ปล่อยว่างถ้าไม่ต้องใช้ Key (เช่น Ollama)</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ความเร็ว</label>
+          <select class="form-input" id="cp-speed">
+            <option value="⚡⚡⚡⚡⚡">⚡⚡⚡⚡⚡ เร็วมาก</option>
+            <option value="⚡⚡⚡⚡" selected>⚡⚡⚡⚡ เร็ว</option>
+            <option value="⚡⚡⚡">⚡⚡⚡ ปานกลาง</option>
+            <option value="⚡⚡">⚡⚡ ช้า</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Models * (บรรทัดละ 1 โมเดล)</label>
+        <textarea class="form-input" id="cp-models" rows="4" placeholder="llama3.1&#10;qwen2.5&#10;my-custom-model" style="font-family:monospace; resize:vertical;"></textarea>
+        <div class="form-hint">หรือใส่ JSON: {"id":"model-name","context":8192,"free":true}</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">คำอธิบาย</label>
+          <input class="form-input" id="cp-desc" placeholder="เช่น Local LLM server">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Signup URL</label>
+          <input class="form-input" id="cp-signup" placeholder="https://example.com/signup">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button class="btn btn-primary" onclick="saveCustomProvider()">💾 บันทึก Provider</button>
+        <button class="btn btn-ghost" onclick="clearCpForm()">🗑️ ล้างฟอร์ม</button>
+        <button class="btn btn-ghost" onclick="testCustomProvider()">🧪 ทดสอบการเชื่อมต่อ</button>
+      </div>
+      <div id="cp-test-result" style="margin-top:12px; display:none;"></div>
+    </div>
+
+    <!-- Preset Templates -->
+    <div class="card" style="margin-top:16px;">
+      <h3 style="margin-bottom:12px; font-size:1rem;">📋 แม่แบบด่วน</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('ollama')">🏠 Ollama</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('vllm')">⚡ vLLM</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('lmstudio')">🎨 LM Studio</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('textgen')">📝 TextGen WebUI</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('litellm')">🔗 LiteLLM</button>
+        <button class="btn btn-ghost btn-sm" onclick="fillCpTemplate('openai-compat')">🔌 Generic OpenAI</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Page: ทดลองแชต ═══ -->
   <div class="page" id="page-playground">
     <div class="page-header">
@@ -1233,6 +1327,7 @@ function loadPage(page) {
     case 'models': loadModels(); break;
     case 'config': loadConfig(); break;
     case 'health': checkHealth(); break;
+    case 'custom-providers': loadCustomProviders(); break;
   }
 }
 
@@ -1918,6 +2013,33 @@ async function loadAnalytics(days, clickedBtn) {
         💾 Cache: ${cache.hits || 0} hits / ${cache.misses || 0} misses (${cache.hit_rate || 0}% hit rate)
       </div>`;
     }
+
+    // Latency stats
+    try {
+      const latRes = await fetch(`/api/stats/latency?days=${days}`);
+      const latData = await latRes.json();
+      const latProviders = latData.providers || [];
+      if (latProviders.length > 0) {
+        let latHtml = `<div style="margin-top:16px;"><h3 style="margin-bottom:12px; font-size:0.95rem;">⚡ Latency by Provider</h3>`;
+        latHtml += '<div style="display:grid; gap:6px;">';
+        const maxLat = Math.max(...latProviders.map(p => p.avg_latency_ms), 1);
+        latProviders.forEach(p => {
+          const barW = Math.max(5, (p.avg_latency_ms / maxLat) * 100);
+          const color = p.avg_latency_ms < 500 ? 'var(--green)' : p.avg_latency_ms < 2000 ? 'var(--yellow)' : 'var(--red)';
+          latHtml += `<div style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg3); border-radius:8px;">
+            <span style="width:120px; font-size:0.8rem; font-weight:600;">${p.provider}</span>
+            <div style="flex:1; height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+              <div style="height:100%; width:${barW}%; background:${color}; border-radius:4px;"></div>
+            </div>
+            <span style="font-size:0.75rem; color:var(--text2); width:60px; text-align:right;">${p.avg_latency_ms}ms</span>
+            <span style="font-size:0.7rem; color:var(--text3);">${p.success_rate}% ✓</span>
+            <span style="font-size:0.7rem; color:var(--green);">${p.fast_rate}% fast</span>
+          </div>`;
+        });
+        latHtml += '</div></div>';
+        document.getElementById('analytics-cost').innerHTML += latHtml;
+      }
+    } catch(e) { /* latency stats optional */ }
   } catch(e) {
     document.getElementById('analytics-stats').innerHTML = `<div class="card" style="color:var(--red);">❌ โหลดข้อมูลล้มเหลว: ${e.message}</div>`;
   }
@@ -2028,6 +2150,165 @@ window.fetch = function(url, opts = {}) {
   }
   return _origFetch.call(this, url, opts);
 };
+
+// ── Custom Providers ──
+function loadCustomProviders() {
+  loadCustomProvidersList();
+}
+
+async function loadCustomProvidersList() {
+  const el = document.getElementById('custom-providers-list');
+  try {
+    const res = await fetch('/api/providers/custom');
+    const data = await res.json();
+    const providers = data.providers || [];
+
+    if (providers.length === 0) {
+      el.innerHTML = '<div style="text-align:center; color:var(--text3); padding:20px;">ยังไม่มี Custom Provider — เพิ่มด้านล่างได้เลย</div>';
+      return;
+    }
+
+    el.innerHTML = providers.map(p => `
+      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--bg3); border-radius:10px; margin-bottom:8px;">
+        <span style="font-size:1.3rem;">${p.flag}</span>
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escHtml(p.name)} <span style="font-size:0.7rem; color:var(--text3);">(${p.id})</span></div>
+          <div style="font-size:0.75rem; color:var(--text3);">${escHtml(p.api_base)} · ${p.models.length} models</div>
+          <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">
+            ${p.models.map(m => `<span class="model-tag ${m.free ? 'free' : ''}" style="font-size:0.65rem; padding:2px 6px;">${m.id}</span>`).join('')}
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          ${p.has_key ? '<span class="badge badge-green">✅ Key OK</span>' : '<span class="badge badge-yellow">⚠️ No Key</span>'}
+          <button class="btn btn-danger btn-sm" onclick="deleteCustomProvider('${p.id}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);">❌ โหลดล้มเหลว: ${e.message}</div>`;
+  }
+}
+
+async function saveCustomProvider() {
+  const id = document.getElementById('cp-id').value.trim().toLowerCase().replace(/\s+/g, '-');
+  const name = document.getElementById('cp-name').value.trim();
+  const apiBase = document.getElementById('cp-api-base').value.trim();
+  const apiKeyEnv = document.getElementById('cp-api-key-env').value.trim();
+  const speed = document.getElementById('cp-speed').value;
+  const modelsText = document.getElementById('cp-models').value.trim();
+  const desc = document.getElementById('cp-desc').value.trim();
+  const signup = document.getElementById('cp-signup').value.trim();
+  const flag = document.getElementById('cp-flag').value.trim() || '🌐';
+
+  if (!id) { toast('กรุณาใส่ Provider ID', 'error'); return; }
+  if (!name) { toast('กรุณาใส่ชื่อ Provider', 'error'); return; }
+  if (!apiBase) { toast('กรุณาใส่ API Base URL', 'error'); return; }
+  if (!modelsText) { toast('กรุณาใส่อย่างน้อย 1 โมเดล', 'error'); return; }
+
+  // Parse models
+  const modelLines = modelsText.split('\n').map(l => l.trim()).filter(Boolean);
+  const models = modelLines.map(line => {
+    try {
+      const parsed = JSON.parse(line);
+      return parsed;
+    } catch {
+      return { id: line, context: 4096, free: true, priority: 50 };
+    }
+  });
+
+  const payload = {
+    id, name, api_base: apiBase, api_key_env: apiKeyEnv || null,
+    needs_key: !!apiKeyEnv, speed, models, desc, signup_url: signup, flag
+  };
+
+  try {
+    const res = await fetch('/api/providers/custom', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast(data.message);
+      clearCpForm();
+      loadCustomProvidersList();
+    } else {
+      toast(data.error || 'บันทึกล้มเหลว', 'error');
+    }
+  } catch(e) { toast('บันทึกล้มเหลว: ' + e.message, 'error'); }
+}
+
+async function deleteCustomProvider(id) {
+  if (!confirm(`ลบ Custom Provider "${id}" แน่ใจไหม?`)) return;
+  try {
+    const res = await fetch(`/api/providers/custom/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      toast(data.message);
+      loadCustomProvidersList();
+    } else {
+      toast(data.error || 'ลบล้มเหลว', 'error');
+    }
+  } catch(e) { toast('ลบล้มเหลว', 'error'); }
+}
+
+async function testCustomProvider() {
+  const apiBase = document.getElementById('cp-api-base').value.trim();
+  const apiKeyEnv = document.getElementById('cp-api-key-env').value.trim();
+  const modelsText = document.getElementById('cp-models').value.trim();
+  const el = document.getElementById('cp-test-result');
+
+  if (!apiBase) { toast('กรุณาใส่ API Base URL ก่อน', 'error'); return; }
+
+  const firstModel = modelsText.split('\n')[0]?.trim() || 'test';
+  el.style.display = 'block';
+  el.innerHTML = '<div style="color:var(--text2);">⏳ กำลังทดสอบการเชื่อมต่อ...</div>';
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    // Try a simple request to check connectivity
+    const resp = await fetch(apiBase + '/models', { method: 'GET' });
+    if (resp.ok) {
+      const data = await resp.json();
+      const modelCount = data.data?.length || 0;
+      el.innerHTML = `<div style="color:var(--green);">✅ เชื่อมต่อสำเร็จ! พบ ${modelCount} โมเดล</div>`;
+    } else {
+      el.innerHTML = `<div style="color:var(--yellow);">⚠️ ได้ status ${resp.status} — endpoint อาจใช้ได้แต่ต้องตรวจสอบเพิ่ม</div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);">❌ เชื่อมต่อไม่ได้: ${escHtml(e.message)}<br><span style="font-size:0.75rem; color:var(--text3);">ตรวจสอบ URL และ network connectivity</span></div>`;
+  }
+}
+
+function clearCpForm() {
+  ['cp-id', 'cp-name', 'cp-api-base', 'cp-api-key-env', 'cp-models', 'cp-desc', 'cp-signup'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('cp-flag').value = '🌐';
+  document.getElementById('cp-speed').value = '⚡⚡⚡⚡';
+  document.getElementById('cp-test-result').style.display = 'none';
+}
+
+function fillCpTemplate(type) {
+  const templates = {
+    ollama: { id: 'ollama-local', name: 'Ollama (Local)', flag: '🏠', apiBase: 'http://localhost:11434/v1', apiKeyEnv: '', speed: '⚡⚡⚡⚡', models: 'llama3.1\nqwen2.5\nmistral\ngemma2', desc: 'Local Ollama server', signup: 'https://ollama.com' },
+    vllm: { id: 'vllm-local', name: 'vLLM Server', flag: '⚡', apiBase: 'http://localhost:8000/v1', apiKeyEnv: '', speed: '⚡⚡⚡⚡⚡', models: 'model-name', desc: 'Local vLLM inference server', signup: '' },
+    lmstudio: { id: 'lmstudio', name: 'LM Studio', flag: '🎨', apiBase: 'http://localhost:1234/v1', apiKeyEnv: '', speed: '⚡⚡⚡⚡', models: 'loaded-model', desc: 'LM Studio local server', signup: 'https://lmstudio.ai' },
+    textgen: { id: 'textgen', name: 'TextGen WebUI', flag: '📝', apiBase: 'http://localhost:5000/v1', apiKeyEnv: '', speed: '⚡⚡⚡', models: 'current-model', desc: 'oobabooga TextGen WebUI', signup: '' },
+    litellm: { id: 'litellm', name: 'LiteLLM Proxy', flag: '🔗', apiBase: 'http://localhost:4000/v1', apiKeyEnv: 'LITELLM_API_KEY', speed: '⚡⚡⚡⚡', models: 'gpt-4o\nclaude-3.5-sonnet', desc: 'LiteLLM unified proxy', signup: 'https://litellm.ai' },
+    'openai-compat': { id: 'custom', name: 'My Provider', flag: '🔌', apiBase: 'https://api.example.com/v1', apiKeyEnv: 'MY_API_KEY', speed: '⚡⚡⚡', models: 'model-1\nmodel-2', desc: 'OpenAI-compatible API', signup: '' },
+  };
+  const t = templates[type];
+  if (!t) return;
+  document.getElementById('cp-id').value = t.id;
+  document.getElementById('cp-name').value = t.name;
+  document.getElementById('cp-flag').value = t.flag;
+  document.getElementById('cp-api-base').value = t.apiBase;
+  document.getElementById('cp-api-key-env').value = t.apiKeyEnv;
+  document.getElementById('cp-speed').value = t.speed;
+  document.getElementById('cp-models').value = t.models;
+  document.getElementById('cp-desc').value = t.desc;
+  document.getElementById('cp-signup').value = t.signup;
+}
 
 // ── Init ──
 (async () => {
