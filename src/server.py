@@ -12,14 +12,12 @@ Single server on one port:
 Built with FastAPI + SQLite for production performance.
 """
 import os
-import sys
 import json
 import time
 import hashlib
 import logging
 import sqlite3
 import threading
-import signal
 import secrets
 from pathlib import Path
 from collections import defaultdict
@@ -27,9 +25,8 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # ── Config ──────────────────────────────────────────
