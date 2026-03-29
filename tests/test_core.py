@@ -1,8 +1,8 @@
 """
 RouterAI Tests — Core functionality tests (FastAPI + SQLite)
 """
-import sys
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
