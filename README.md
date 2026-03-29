@@ -1,45 +1,51 @@
-<div align="center">
-
 # 🔀 RouterAI
 
-### รวม AI ฟรีจากหลายที่มาไว้ที่เดียว — สลับอัตโนมัติเมื่อตัวไหนหมดโควต้า
+> **รวม AI ฟรีทุกตัวมาไว้ที่เดียว** — OpenAI-compatible proxy with auto-failover, rate limiting, and Thai dashboard
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](docker-compose.yml)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-Compatible-purple.svg)](https://github.com/openclaw/openclaw)
+[![CI](https://github.com/tenotony/RouterAI/actions/workflows/ci.yml/badge.svg)](https://github.com/tenotony/RouterAI/actions/workflows/ci.yml)
 
-**OpenAI-compatible API proxy** ใช้แทน OpenAI endpoint ได้เลย
-สำหรับ OpenClaw, ChatGPT-like apps, หรือโปรแกรมอะไรก็ได้ที่รองรับ OpenAI API
-
-🌐 **Dashboard ภาษาไทย** · ⚡ **Auto-Failover** · 🆓 **โมเดลฟรีเพียบ** · 🔒 **ปลอดภัย 100%**
-
-</div>
+🌐 Dashboard ภาษาไทย · ⚡ Auto-Failover · 🆓 โมเดลฟรีเพียบ · 🔒 ปลอดภัย 100%
 
 ---
 
-## ⚡ ติดตั้งด่วน (1 คำสั่ง)
+## ✨ ฟีเจอร์
+
+| ฟีเจอร์ | คำอธิบาย |
+|---------|-----------|
+| 🔄 **Auto-Failover** | ถ้าตัวไหนล่ม สลับไปตัวอื่นอัตโนมัติ |
+| 💾 **Response Cache** | จำคำตอบเดิม ไม่ต้องเสียตังค์เรียกซ้ำ |
+| 🚦 **Rate Limiting** | จำกัด requests ต่อ client ป้องกัน abuse |
+| 📊 **Dashboard ไทย** | จัดการทุกอย่างผ่านหน้าเว็บ |
+| 🔌 **12 Providers** | Groq, MiMo, Gemini, Cerebras, DeepSeek, ฯลฯ |
+| 🤖 **OpenClaw Ready** | สร้าง config เชื่อม OpenClaw 1 คลิก |
+| 🔒 **Auth Support** | ตั้ง API Key ป้องกัน endpoint |
+| 🐳 **Docker** | deploy ง่าย container เดียว |
+
+---
+
+## ⚡ ติดตั้งเร็ว (1 คำสั่ง)
+
+### Linux / macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tenotony/RouterAI/main/scripts/install-docker.sh | bash
 ```
 
 สคริปต์จะ:
-- ✅ ตรวจสอบและติดตั้ง Docker อัตโนมัติ (ถ้ายังไม่มี)
+- ✅ ตรวจสอบ/ติดตั้ง Docker อัตโนมัติ
 - ✅ ดาวน์โหลดโค้ด
 - ✅ สร้างไฟล์ตั้งค่า
 - ✅ เริ่มระบบด้วย Docker Compose
 
-## 🐳 ติดตั้งด้วย Docker
+### Windows
 
-```bash
+```powershell
 git clone https://github.com/tenotony/RouterAI.git
 cd RouterAI
-docker compose up -d
+.\scripts\setup.bat
 ```
 
-ต้องมี Docker Desktop ติดตั้งก่อน → [ดาวน์โหลดที่นี่](https://www.docker.com/products/docker-desktop/)
-
-## 💻 ติดตั้งด้วยมือ (ไม่ต้องใช้ Docker)
+### Manual (ไม่ใช้ Docker)
 
 ```bash
 git clone https://github.com/tenotony/RouterAI.git
@@ -47,21 +53,22 @@ cd RouterAI
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-# Terminal 1: รัน Proxy (API ที่ port 8900)
-python src/proxy.py
-
-# Terminal 2: รัน Dashboard (หน้าจัดการที่ port 8899)
-python src/dashboard.py
+python src/server.py
 ```
-
-Dashboard: [http://127.0.0.1:8899](http://127.0.0.1:8899)
 
 ---
 
-## 🖥️ Dashboard
+## 🚀 ใช้งาน
 
-เปิด [http://localhost:8899](http://localhost:8899) หลังติดตั้งเสร็จ:
+### เปิด Dashboard
+
+```
+http://localhost:8900
+```
+
+> **port เดียวจบ** — ทั้ง Dashboard + API อยู่ที่ port 8900
+
+### แท็บ Dashboard
 
 | แท็บ | หน้าที่ |
 |------|---------|
@@ -70,11 +77,12 @@ Dashboard: [http://127.0.0.1:8899](http://127.0.0.1:8899)
 | 🔑 จัดการ API Key | กรอก Key สำหรับแต่ละเจ้า |
 | 🤖 เชื่อม OpenClaw | สร้าง Config อัตโนมัติ 1 คลิก |
 | 🧠 เลือกโมเดล | ดูโมเดลทั้งหมด ฟิลเตอร์ฟรี/จ่ายเงิน |
-| ⚙️ ตั้งค่า | Cache, Failover, Budget |
+| ⚙️ ตั้งค่า | Cache, Failover, Budget, Rate Limit |
 | 🩺 ตรวจสอบระบบ | สถานะสุขภาพระบบทั้งหมด |
-| 📦 คู่มือติดตั้ง | วิธีติดตั้งทุก OS |
 
-## 🤖 เชื่อมกับ OpenClaw (ง่ายสุดๆ)
+---
+
+## 🔗 เชื่อมต่อกับ OpenClaw
 
 1. ใส่ API Key อย่างน้อย 1 ตัว (แนะนำ Groq)
 2. Dashboard → แท็บ "เชื่อม OpenClaw" → เลือก Provider + Model → กดปุ่ม ⚡
@@ -96,122 +104,103 @@ Dashboard: [http://127.0.0.1:8899](http://127.0.0.1:8899)
 
 ---
 
-## 🔌 ผู้ให้บริการที่รองรับ
+## 🔑 Provider ที่รองรับ
 
-| Provider | ลิงก์สมัคร | ทำไมต้องสมัคร | ความเร็ว |
-|----------|-----------|--------------|---------|
-| ⚡ **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | เร็วสุดๆ ~300ms ฟรี | ⭐⭐⭐⭐⭐ |
-| 🟠 **Xiaomi MiMo** | [xiaomi.com/mimo](https://xiaomi.com/mimo) | MiMo v2 คุณภาพสูง ฟรี | ⭐⭐⭐⭐ |
-| 🟢 **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | ฟรี 15 RPM, vision | ⭐⭐⭐⭐ |
-| 🚀 **Cerebras** | [cloud.cerebras.ai](https://cloud.cerebras.ai) | เร็วมาก ฟรี | ⭐⭐⭐⭐⭐ |
-| 🌐 **OpenRouter** | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) | โมเดลฟรีเยอะ | ⭐⭐⭐ |
-| 🟣 **Mistral** | [console.mistral.ai](https://console.mistral.ai/api-keys/) | Mistral models | ⭐⭐⭐ |
-| 🔵 **NVIDIA** | [build.nvidia.com](https://build.nvidia.com/explore/discover) | Llama ฟรี | ⭐⭐⭐⭐ |
-| 💎 **DeepSeek** | [platform.deepseek.com](https://platform.deepseek.com) | คุณภาพสูง | ⭐⭐⭐⭐ |
-| 🇨🇳 **SiliconFlow** | [cloud.siliconflow.cn](https://cloud.siliconflow.cn) | Qwen/DeepSeek ฟรี | ⭐⭐⭐ |
-| 🪂 **Chutes AI** | [chutes.ai](https://chutes.ai) | โมเดลฟรีหลายตัว | ⭐⭐⭐ |
-| 🤝 **Together AI** | [api.together.xyz](https://api.together.xyz/settings/api-keys) | $5 เครดิตฟรี | ⭐⭐⭐ |
-| 🏠 **Ollama** | [ollama.com](https://ollama.com) | รัน Local ฟรี | ⭐⭐⭐⭐ |
+| Provider | สมัคร | ฟรี? | ความเร็ว |
+|----------|-------|------|---------|
+| ⚡ Groq | [console.groq.com/keys](https://console.groq.com/keys) | ✅ | ⭐⭐⭐⭐⭐ |
+| 🟠 Xiaomi MiMo | [xiaomi.com/mimo](https://xiaomi.com/mimo) | ✅ | ⭐⭐⭐⭐ |
+| 🟢 Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | ✅ | ⭐⭐⭐⭐ |
+| 🚀 Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | ✅ | ⭐⭐⭐⭐⭐ |
+| 🌐 OpenRouter | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) | ✅ | ⭐⭐⭐ |
+| 🟣 Mistral | [console.mistral.ai](https://console.mistral.ai/api-keys/) | ✅ | ⭐⭐⭐ |
+| 🔵 NVIDIA | [build.nvidia.com](https://build.nvidia.com/explore/discover) | ✅ | ⭐⭐⭐⭐ |
+| 💎 DeepSeek | [platform.deepseek.com](https://platform.deepseek.com) | ❌ | ⭐⭐⭐⭐ |
+| 🇨🇳 SiliconFlow | [cloud.siliconflow.cn](https://cloud.siliconflow.cn) | ✅ | ⭐⭐⭐ |
+| 🪂 Chutes AI | [chutes.ai](https://chutes.ai) | ✅ | ⭐⭐⭐ |
+| 🤝 Together AI | [api.together.xyz](https://api.together.xyz/settings/api-keys) | $5 credit | ⭐⭐⭐ |
+| 🏠 Ollama | [ollama.com](https://ollama.com) | ✅ local | ⭐⭐⭐⭐ |
 
-💡 **แนะนำ:** สมัครแค่ Groq ตัวเดียวก็เริ่มใช้ได้เลย!
-
----
-
-## 🔑 ใส่ API Key
-
-ใส่ Key ได้ 3 ทาง:
-
-1. **Dashboard (แนะนำ!)** → [http://localhost:8899](http://localhost:8899) → แท็บ "จัดการ API Key"
-2. **แก้ไฟล์ .env** → เปิด `.env` แล้วใส่:
-```
-GROQ_API_KEY=gsk_xxxxx
-MIMO_API_KEY=mimo_xxxxx
-GOOGLE_API_KEY=AIzaSyxxxxx
-CEREBRAS_API_KEY=csk-xxxxx
-```
-3. **ไฟล์ api_keys.json** → เปิดแล้วใส่:
-```json
-{
-  "GROQ_API_KEY": "gsk_xxxxx",
-  "MIMO_API_KEY": "mimo_xxxxx",
-  "GOOGLE_API_KEY": "AIzaSyxxxxx",
-  "CEREBRAS_API_KEY": "csk-xxxxx"
-}
-```
+> 💡 **แนะนำ:** สมัครแค่ **Groq** ตัวเดียวก็เริ่มใช้ได้เลย!
 
 ---
 
-## 💰 จัดการงบประมาณ (Budget)
+## 🏗️ สถาปัตยกรรม
+
+```
+Request → RouterAI Server (port 8900)
+          │
+          ├─ /v1/*    → OpenAI-compatible proxy
+          ├─ /api/*   → Dashboard API
+          ├─ /        → Dashboard UI
+          └─ /health  → Health check
+               │
+               ├─ 1) Response Cache Check
+               │     └─ HIT → return cached
+               │
+               ├─ 2) Rate Limit Check
+               │     └─ EXCEEDED → 429
+               │
+               ├─ 3) Smart Routing
+               │     ├─ Latency scoring
+               │     ├─ Error tracking (exponential backoff)
+               │     └─ Auto-failover
+               │
+               ├─ 4) Provider Pool
+               │     ├─ Groq (priority: 100)
+               │     ├─ Xiaomi MiMo (priority: 98)
+               │     ├─ Cerebras (priority: 95)
+               │     └─ ...more providers
+               │
+               └─ 5) Response → Cache → Track → Return
+```
+
+---
+
+## 🔧 พัฒนาต่อ (สำหรับ Dev)
 
 ```bash
-# เปิดใช้งาน
-python routerai budget enable
+# ติดตั้ง + รัน
+./dev.sh install      # ติดตั้ง deps + dev tools
+./dev.sh run          # รัน unified server
+./dev.sh test         # รัน tests
+./dev.sh lint         # ตรวจ code quality
+./dev.sh format       # จัด format อัตโนมัติ
 
-# จำกัด $5/วัน
-python routerai budget set 5.00
-
-# ดูสถานะ
-python routerai budget show
+# Docker
+./dev.sh docker-build # build image
+./dev.sh docker-run   # run with docker compose
+./dev.sh docker-stop  # stop containers
 ```
 
-เมื่อถึงขีดจำกัด:
-- **downgrade** (default) → สลับไป model ที่ถูกกว่าอัตโนมัติ
-- **block** → หยุดรับ request
-- **warn** → แค่เตือน
-
----
-
-## 📁 โครงสร้างโปรเจกต์
+### โครงสร้างโปรเจกต์
 
 ```
 RouterAI/
 ├── src/
-│   ├── proxy.py           # Main proxy server (OpenAI-compatible)
-│   ├── dashboard.py        # Web dashboard server
-│   └── cli.py              # CLI commands
+│   └── server.py          ← Unified server (proxy + dashboard + API)
 ├── web/
-│   └── index.html          # Dashboard UI (ภาษาไทย 🇹🇭)
+│   └── index.html         ← Dashboard UI (vanilla JS, Thai)
+├── tests/
+│   └── test_core.py       ← Unit tests (23 tests)
 ├── scripts/
-│   ├── install.sh          # One-line installer (venv)
-│   ├── install-docker.sh   # One-line installer (Docker)
-│   └── setup.bat           # Windows setup
-├── routerai                # CLI shortcut
-├── docker-compose.yml
-├── Dockerfile
-├── .env.example            # Environment template
-├── providers.json          # Provider config
-├── requirements.txt
-└── README.md
-```
-
----
-
-## 🔄 วิธีการทำงาน
-
-```
-Request → RouterAI Proxy (port 8900)
-  │
-  ├─ 1) Response Cache Check
-  │  └─ HIT → return cached response (ไม่เสียตังค์!)
-  │
-  ├─ 2) Budget Check
-  │  └─ EXCEEDED → downgrade model / block
-  │
-  ├─ 3) Smart Routing Engine
-  │  ├─ Latency scoring
-  │  ├─ Error tracking
-  │  └─ Auto-failover
-  │
-  ├─ 4) Provider Pool
-  │  ├─ Groq (priority: 100)
-  │  ├─ Xiaomi MiMo (priority: 98)
-  │  ├─ Cerebras (priority: 95)
-  │  ├─ DeepSeek (priority: 90)
-  │  ├─ Gemini (priority: 88)
-  │  ├─ OpenRouter (priority: 85)
-  │  └─ ...more providers
-  │
-  └─ 5) Response → Cache it → Track cost → Return to Client
+│   ├── install.sh         ← Auto installer (venv)
+│   ├── install-docker.sh  ← Auto installer (Docker)
+│   ├── setup.bat          ← Windows setup
+│   ├── update.sh          ← Update & restart
+│   └── entrypoint.sh      ← Docker entrypoint
+├── .github/
+│   └── workflows/
+│       └── ci.yml         ← GitHub Actions CI
+├── docker-compose.yml     ← Docker deployment
+├── Dockerfile             ← Docker image
+├── requirements.txt       ← Python deps
+├── providers.json         ← Provider config
+├── pyproject.toml         ← ruff + pytest config
+├── dev.sh                 ← Development script
+├── .env.example           ← Environment template
+├── README.md              ← คุณกำลังอ่านอยู่
+└── ROADMAP.md             ← Development plan
 ```
 
 ---
@@ -222,34 +211,33 @@ Request → RouterAI Proxy (port 8900)
 - ✅ ไม่มี tracking / analytics
 - ✅ API Key เก็บเฉพาะเครื่องคุณ
 - ✅ โค้ดเปิดทั้งหมด (MIT License)
+- ✅ Rate limiting ป้องกัน abuse
+- ✅ Auth support (ตั้ง `ROUTERAI_API_KEY` env var)
 
 ---
 
-## ❓ ปัญหาที่พบบ่อย
+## ❓ Troubleshooting
 
 | ปัญหา | วิธีแก้ |
 |-------|--------|
-| Docker ไม่เริ่ม | ตรวจสอบ Docker ติดตั้งแล้ว: `docker --version` |
-| Port ถูกใช้ | เปลี่ยน port ใน `docker-compose.yml` |
+| Docker ไม่เริ่ม | ตรวจสอบ: `docker --version` |
+| Port ถูกใช้ | เปลี่ยน `ROUTERAI_PORT` ใน `.env` |
 | API Key ไม่ทำงาน | กด "ทดสอบ" ใน Dashboard เพื่อเช็ค |
 | OpenClaw เชื่อมไม่ได้ | รัน `openclaw restart` หลังตั้งค่า |
+
+---
+
+## 🤝 ชุมชน
 
 - [เปิด Issue](https://github.com/tenotony/RouterAI/issues)
 - [เข้ากลุ่ม Facebook](https://www.facebook.com/groups/1248346110734837)
 
 ---
 
-## 📜 License
+## 📄 License
 
 MIT License — ใช้ได้ฟรี แก้ไขได้ แจกจ่ายได้
 
 ---
 
-<div align="center">
-
-**สร้างด้วย ❤️ เพื่อคนไทย 🇹🇭**
-
-[![Star](https://img.shields.io/github/stars/tenotony/RouterAI?style=social)](https://github.com/tenotony/RouterAI)
-[![Fork](https://img.shields.io/github/forks/tenotony/RouterAI?style=social)](https://github.com/tenotony/RouterAI)
-
-</div>
+สร้างด้วย ❤️ เพื่อคนไทย 🇹🇭

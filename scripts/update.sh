@@ -58,7 +58,7 @@ echo -e "  ${GREEN}✅ กู้คืน config เรียบร้อย${NC
 echo -e "  ${BLUE}[4/5]${NC} Rebuild และ Restart..."
 if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
     docker compose down 2>/dev/null || true
-    docker rmi routerai-proxy routerai-dashboard 2>/dev/null || true
+    docker rmi routerai-proxy routerai-dashboard routerai 2>/dev/null || true
     docker compose build --no-cache 2>&1 | tail -3
     docker compose up -d 2>&1
     echo -e "  ${GREEN}✅ Docker containers รันแล้ว${NC}"
@@ -84,6 +84,5 @@ fi
 
 echo ""
 echo -e "  ${GREEN}${BOLD}✅ อัพเดตเสร็จเรียบร้อย! 🎉${NC}"
-echo -e "  Dashboard: ${BLUE}http://127.0.0.1:8899${NC}"
-echo -e "  Proxy:     ${BLUE}http://127.0.0.1:8900/v1${NC}"
+echo -e "  Dashboard + API: ${BLUE}http://127.0.0.1:8900${NC}"
 echo ""

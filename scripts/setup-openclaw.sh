@@ -62,7 +62,7 @@ docker compose up -d --build
 
 echo -e "${GREEN}✅ RouterAI เริ่มทำงานแล้ว${NC}"
 echo -e "${CYAN}   📡 Proxy: http://127.0.0.1:8900${NC}"
-echo -e "${CYAN}   📊 Dashboard: http://127.0.0.1:8899${NC}"
+echo -e "${CYAN}   📊 Dashboard: http://127.0.0.1:8900${NC}"
 
 # Step 4: Wait for health
 echo -e "${YELLOW}[4/6] รอ RouterAI พร้อมใช้งาน...${NC}"
@@ -96,7 +96,7 @@ if [ "$SKIP_OPENCLAW" = "true" ]; then
     echo -e "${CYAN}   สามารถตั้งค่าเองได้ทีหลังจาก openclaw-config.json${NC}"
 else
     echo -e "${GREEN}✅ พบ openclaw-config.json แล้ว${NC}"
-    echo -e "${CYAN}   กรุณาเปิด Dashboard ที่ http://127.0.0.1:8899${NC}"
+    echo -e "${CYAN}   กรุณาเปิด Dashboard ที่ http://127.0.0.1:8900${NC}"
     echo -e "${CYAN}   ไปที่แท็บ 'เชื่อม OpenClaw' เพื่อสร้าง config อัตโนมัติ${NC}"
 fi
 
@@ -118,7 +118,7 @@ echo -e "      └─ 🔄 RouterAI (เครื่องมือช่วย)
 echo -e "      └─ 🧠 Knowledge Base (คลังความรู้)"
 echo ""
 echo -e "${YELLOW}ขั้นตอนถัดไป:${NC}"
-echo -e "   1. เปิด Dashboard: http://127.0.0.1:8899"
+echo -e "   1. เปิด Dashboard: http://127.0.0.1:8900"
 echo -e "   2. ใส่ API Key อย่างน้อย 1 ตัว (แนะนำ Groq)"
 echo -e "   3. ไปที่แท็บ 'เชื่อม OpenClaw' → กด ⚡"
 echo -e "   4. คัดลอก Config → วางใน ~/.openclaw/openclaw.json"

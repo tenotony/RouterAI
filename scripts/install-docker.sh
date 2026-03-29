@@ -152,7 +152,7 @@ echo -e "  ${GREEN}${BOLD}╚═════════════════
 echo ""
 echo -e "  ${BOLD}📝 ขั้นตอนต่อไป:${NC}"
 echo ""
-echo -e "  ${CYAN}1.${NC} เปิด Dashboard: ${BLUE}http://localhost:8899${NC}"
+echo -e "  ${CYAN}1.${NC} เปิด Dashboard: ${BLUE}http://localhost:8900${NC}"
 echo -e "  ${CYAN}2.${NC} ไปหน้า \"🔑 จัดการ API Key\" ใส่ Key อย่างน้อย 1 ตัว"
 echo -e "  ${CYAN}3.${NC} ไปหน้า \"🤖 เชื่อม OpenClaw\" สร้าง Config"
 echo -e "  ${CYAN}4.${NC} วาง Config ใน ~/.openclaw/openclaw.json"
