@@ -2,27 +2,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir httpx flask flask-cors gunicorn
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ ./src/
-COPY providers.json .
+# Copy source
+COPY . .
 
-RUN mkdir -p /app/data/cache
-RUN echo '{}' > /app/api_keys.json
-RUN echo '{}' > /app/proxy_config.json
-
-ENV PYTHONIOENCODING=utf-8
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/src
-ENV ROUTERAI_PORT=8900
-
-COPY scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Create data directories
+RUN mkdir -p data/cache
 
 EXPOSE 8900
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')" || exit 1
-
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "src/proxy.py"]
+# Run unified server
+CMD ["gunicorn", "--bind", "0.0.0.0:8900", "--workers", "2", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "src.server:app"]

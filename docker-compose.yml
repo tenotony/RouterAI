@@ -1,17 +1,17 @@
 # ============================================
-#  🔀 RouterAI — Free AI Model Router for OpenClaw
+#  🔀 RouterAI — Unified Server (Docker)
 #  docker compose up -d
 # ============================================
 
 services:
-  proxy:
+  routerai:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: routerai-proxy
+    container_name: routerai
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8900:8900"
+      - "${ROUTERAI_PORT:-8900}:8900"
     volumes:
       - routerai-data:/app/data
       - routerai-config:/app/config
@@ -22,6 +22,7 @@ services:
       - PYTHONUNBUFFERED=1
       - ROUTERAI_PORT=8900
       - ROUTERAI_HOST=0.0.0.0
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       # Set this to protect /v1/* endpoints (optional)
       # - ROUTERAI_API_KEY=your-secret-key
     healthcheck:
@@ -30,30 +31,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-    networks:
-      - routerai-net
-
-  dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile.dashboard
-    container_name: routerai-dashboard
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8899:8899"
-    volumes:
-      - routerai-data:/app/data
-      - routerai-config:/app/config
-    env_file:
-      - .env
-    environment:
-      - PYTHONIOENCODING=utf-8
-      - PYTHONUNBUFFERED=1
-      - PROXY_URL=http://proxy:8900
-      - DASHBOARD_PORT=8899
-    depends_on:
-      proxy:
-        condition: service_healthy
     networks:
       - routerai-net
 
