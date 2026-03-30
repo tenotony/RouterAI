@@ -407,12 +407,17 @@ class TestProviderManager:
             from server import ProviderManager
             pm = ProviderManager()
 
+            # First 4 errors should NOT trigger cooldown (threshold is 5)
             pm.report_error("test", "error1")
             pm.report_error("test", "error2")
+            pm.report_error("test", "error3")
+            pm.report_error("test", "error4")
             assert pm._cooldown_until["test"] == 0
 
-            pm.report_error("test", "error3")
+            # 5th error triggers cooldown
+            pm.report_error("test", "error5")
             assert pm._cooldown_until["test"] > 0
 
+            # Success resets
             pm.report_success("test")
             assert pm._error_counts["test"] == 0
