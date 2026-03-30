@@ -1534,10 +1534,12 @@ async function loadKeysForm() {
 }
 
 let keysVisible = false;
-// Clear revealed flag when user types in a revealed input
+// Track user edits on key inputs to distinguish "untouched" from "cleared"
 document.addEventListener('input', (e) => {
-  if (e.target.matches && e.target.matches('#keys-list input[data-revealed]')) {
-    delete e.target.dataset.revealed;
+  if (e.target.matches && e.target.matches('#keys-list input[data-key]')) {
+    e.target.dataset.edited = 'true';
+    // Clear revealed flag when user types in a revealed input
+    if (e.target.dataset.revealed) delete e.target.dataset.revealed;
   }
 });
 async function toggleKeyVisibility() {
@@ -1563,12 +1565,13 @@ async function toggleKeyVisibility() {
       keysVisible = false;
     }
   } else {
-    // Hide: restore to empty + placeholder, clear revealed flag
+    // Hide: restore to empty + placeholder, clear revealed + edited flags
     inputs.forEach(input => {
       input.type = 'password';
       input.value = '';
       input.style.color = '';
       delete input.dataset.revealed;
+      delete input.dataset.edited;
     });
   }
 }
@@ -1578,12 +1581,24 @@ async function saveKeys() {
   let hasChange = false;
   document.querySelectorAll('#keys-list input[data-key]').forEach(input => {
     const key = input.dataset.key;
-    // If key was revealed but user didn't edit it, skip (treat as unchanged)
-    if (input.dataset.revealed === 'true') return;
+    const maskedVal = input.dataset.masked || '';
+    const wasEdited = input.dataset.edited === 'true';
     const val = input.value.trim();
-    // Send every field — empty means "delete", non-empty means "set/overwrite"
-    keys[key] = val;
-    hasChange = true;
+
+    // If key was revealed but user didn't type anything, skip
+    if (input.dataset.revealed === 'true' && !wasEdited) return;
+
+    if (wasEdited) {
+      // User interacted with this field → send current value
+      // val=="" means delete, val!=""/  means overwrite
+      keys[key] = val;
+      hasChange = true;
+    } else if (maskedVal && !val) {
+      // User never touched this field, has existing key → send masked to preserve
+      keys[key] = maskedVal;
+      hasChange = true;
+    }
+    // No existing key + never touched → don't send (nothing to do)
   });
   if (!hasChange) { toast('ไม่มีการเปลี่ยนแปลง API Key', 'info'); return; }
   try {
