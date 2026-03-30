@@ -1501,6 +1501,7 @@ async function loadKeysForm() {
       .map(p => {
         const key = envMap[p.id] || p.id.toUpperCase() + '_API_KEY';
         const maskedVal = maskedKeys[key] || '';
+        // Input always starts empty; masked key shown as placeholder only
         return `
           <div class="key-row">
             <div class="key-provider">
@@ -1511,11 +1512,11 @@ async function loadKeysForm() {
               </div>
             </div>
             <div class="key-input-wrap">
-              <input class="form-input" type="password" id="key-${p.id}" placeholder="ใส่ API Key..." data-key="${key}" value="${maskedVal}">
+              <input class="form-input" type="password" id="key-${p.id}" placeholder="${maskedVal ? 'มี key อยู่ (' + maskedVal + ') — วาง key ใหม่เพื่อแทน หรือปล่อยว่างเพื่อลบ' : 'ใส่ API Key...'}" data-key="${key}" data-masked="${maskedVal}" value="">
               <a href="${p.signup_url}" target="_blank" class="btn btn-ghost btn-sm">สมัคร</a>
             </div>
             <div>
-              ${p.has_key ? '<span class="badge badge-green">✅ มีแล้ว</span>' : '<span class="badge badge-yellow">ยังไม่ใส่</span>'}
+              ${maskedVal ? '<span class="badge badge-green">✅ มีแล้ว</span>' : '<span class="badge badge-yellow">ยังไม่ใส่</span>'}
             </div>
           </div>
         `;
@@ -1524,28 +1525,62 @@ async function loadKeysForm() {
           ${isEncrypted ? '🔒 Keys เข้ารหัสแล้ว (AES)' : '⚠️ Keys เก็บเป็น plaintext — ติดตั้ง cryptography library เพื่อเข้ารหัส'}
         </div>
       `;
+    // Reset toggle state
+    keysVisible = false;
   } catch(e) {
     toast('โหลดฟอร์มล้มเหลว', 'error');
   }
 }
 
 let keysVisible = false;
-function toggleKeyVisibility() {
+async function toggleKeyVisibility() {
   keysVisible = !keysVisible;
-  document.querySelectorAll('#keys-list input[type="password"], #keys-list input[type="text"]').forEach(input => {
-    input.type = keysVisible ? 'text' : 'password';
-  });
+  const inputs = document.querySelectorAll('#keys-list input');
+  if (keysVisible) {
+    // Show actual keys in inputs (fetch from API)
+    try {
+      const res = await fetch('/api/keys/plain');
+      const data = await res.json();
+      const plainKeys = data.keys || {};
+      inputs.forEach(input => {
+        input.type = 'text';
+        const actualKey = plainKeys[input.dataset.key];
+        if (actualKey) {
+          input.value = actualKey;
+          input.style.color = 'var(--green)';
+        }
+      });
+    } catch(e) {
+      toast('โหลด key ไม่สำเร็จ', 'error');
+      keysVisible = false;
+    }
+  } else {
+    // Hide: clear all inputs back to empty (password type)
+    inputs.forEach(input => {
+      input.type = 'password';
+      input.value = '';
+      input.style.color = '';
+    });
+  }
 }
 
 async function saveKeys() {
   const keys = {};
-  document.querySelectorAll('#keys-list input').forEach(input => {
+  let hasChange = false;
+  document.querySelectorAll('#keys-list input[data-key]').forEach(input => {
+    const key = input.dataset.key;
     const val = input.value.trim();
-    if (val) keys[input.dataset.key] = val;
+    // Send every field — empty means "delete", non-empty means "set/overwrite"
+    keys[key] = val;
+    hasChange = true;
   });
-  if (Object.keys(keys).length === 0) { toast('กรุณาใส่ API Key อย่างน้อย 1 ตัว', 'error'); return; }
+  if (!hasChange) { toast('ไม่พบ API Key ให้บันทึก', 'error'); return; }
   try {
-    const res = await fetch('/api/keys', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(keys) });
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(keys)
+    });
     const data = await res.json();
     toast(data.message || 'บันทึกสำเร็จ');
     loadKeysForm();

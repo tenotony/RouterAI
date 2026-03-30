@@ -31,12 +31,15 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 # ── Config ──────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
-PROVIDERS_FILE = BASE_DIR / "providers.json"
-CUSTOM_PROVIDERS_FILE = BASE_DIR / "data" / "custom_providers.json"
-API_KEYS_FILE = BASE_DIR / "api_keys.json"
-ENCRYPTION_KEY_FILE = BASE_DIR / "data" / ".encryption_key"
-PROXY_CONFIG_FILE = BASE_DIR / "proxy_config.json"
 DATA_DIR = BASE_DIR / "data"
+PROVIDERS_FILE = BASE_DIR / "providers.json"
+CUSTOM_PROVIDERS_FILE = DATA_DIR / "custom_providers.json"
+API_KEYS_FILE = DATA_DIR / "api_keys.json"
+ENCRYPTION_KEY_FILE = DATA_DIR / ".encryption_key"
+PROXY_CONFIG_FILE = DATA_DIR / "proxy_config.json"
+# Legacy paths for migration (pre-Docker or old layout)
+_LEGACY_API_KEYS_FILE = BASE_DIR / "api_keys.json"
+_LEGACY_PROXY_CONFIG_FILE = BASE_DIR / "proxy_config.json"
 CACHE_DIR = DATA_DIR / "cache"
 STATS_DB = DATA_DIR / "stats.db"
 WEB_DIR = BASE_DIR / "web"
@@ -48,6 +51,27 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("routerai")
+
+
+# ── Safe Migration: legacy → DATA_DIR ───────────────
+def _migrate_legacy_file(legacy_path: Path, new_path: Path) -> None:
+    """
+    If legacy file exists at old location but not at new DATA_DIR path,
+    safely copy it over. Never overwrites existing new-path files.
+    """
+    if legacy_path.exists() and not new_path.exists():
+        try:
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(str(legacy_path), str(new_path))
+            log.info(f"Migrated {legacy_path.name} → {new_path}")
+        except Exception as e:
+            log.error(f"Failed to migrate {legacy_path} → {new_path}: {e}")
+
+# Run migration on module load (before any load_json_file call)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+_migrate_legacy_file(_LEGACY_API_KEYS_FILE, API_KEYS_FILE)
+_migrate_legacy_file(_LEGACY_PROXY_CONFIG_FILE, PROXY_CONFIG_FILE)
 
 
 # ── Load Config Helpers ─────────────────────────────
@@ -186,13 +210,13 @@ class KeyStore:
         return {k: self.decrypt(v) for k, v in raw.items()}
 
     def save_keys(self, keys: dict) -> None:
-        """Encrypt and save API keys. Merges with existing."""
+        """Encrypt and save API keys. Merges with existing. Empty values → delete key."""
         existing = load_json_file(API_KEYS_FILE, {})
         for k, v in keys.items():
-            if v:  # Only save non-empty
+            if v:
                 existing[k] = self.encrypt(v)
-            elif k in existing:
-                del existing[k]  # Remove cleared keys
+            else:
+                existing.pop(k, None)  # Delete key on empty value
         save_json_file(API_KEYS_FILE, existing)
 
     def get_masked_keys(self) -> dict:
@@ -1264,19 +1288,31 @@ async def api_providers():
 
 @app.post("/api/keys")
 async def api_save_keys(request: Request):
+    """
+    Save API keys with proper change detection.
+
+    Protocol (per field):
+      - Field absent from payload → untouched (preserve existing)
+      - Field value == current masked key → untouched
+      - Field value is empty string "" → delete existing key
+      - Field value is anything else → overwrite with new key
+    """
     data = await request.json()
-    # Filter out masked values (user didn't change them)
-    filtered = {}
     masked_keys = key_store.get_masked_keys()
+    to_save = {}
     for k, v in data.items():
         v = v.strip()
         if not v:
+            # Empty → user wants to delete this key
+            to_save[k] = ""
+        elif v == masked_keys.get(k):
+            # Matches masked display → user didn't change it, skip
             continue
-        if v == masked_keys.get(k):
-            continue  # User didn't change this key — keep existing
-        filtered[k] = v
-    if filtered:
-        manager.save_api_keys(filtered)
+        else:
+            # New value → overwrite
+            to_save[k] = v
+    if to_save:
+        manager.save_api_keys(to_save)
         manager.reload()
     return {"status": "ok", "message": "บันทึก API Key เรียบร้อย ✅"}
 
@@ -1294,6 +1330,20 @@ async def api_masked_keys():
             if env_val and env_key not in masked:
                 env_masked[env_key] = mask_key(env_val)
     return {"keys": {**masked, **env_masked}, "encrypted": key_store.is_encrypted()}
+
+
+@app.get("/api/keys/plain")
+async def api_plain_keys():
+    """Return decrypted API keys for display (toggle visibility). Requires dashboard auth."""
+    keys = key_store.load_keys()
+    env_keys = {}
+    for _pid, provider in manager.providers.items():
+        env_key = provider.get("api_key_env")
+        if env_key and env_key not in keys:
+            env_val = os.environ.get(env_key)
+            if env_val:
+                env_keys[env_key] = env_val
+    return {"keys": {**keys, **env_keys}}
 
 
 @app.get("/api/config")

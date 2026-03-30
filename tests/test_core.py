@@ -416,3 +416,141 @@ class TestProviderManager:
 
             pm.report_success("test")
             assert pm._error_counts["test"] == 0
+
+
+# ── Test: API Key Management ────────────────────────
+
+class TestAPIKeyManagement:
+    """Test API key CRUD: save, overwrite, delete, masked/plain endpoints."""
+
+    def test_save_key(self, client):
+        """POST /api/keys with new key should save it."""
+        resp = client.post("/api/keys", json={"TEST_API_KEY": "sk-test123"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+
+        # Verify via masked endpoint
+        resp = client.get("/api/keys/masked")
+        assert resp.status_code == 200
+        keys = resp.json()["keys"]
+        assert "TEST_API_KEY" in keys
+        assert keys["TEST_API_KEY"].endswith("t123")  # masked: sk-...t123
+        assert "..." in keys["TEST_API_KEY"]
+
+    def test_overwrite_key(self, client):
+        """POST /api/keys with same key name should overwrite."""
+        # Save first key
+        client.post("/api/keys", json={"TEST_API_KEY": "sk-old-key-1111"})
+        # Overwrite with new key
+        resp = client.post("/api/keys", json={"TEST_API_KEY": "sk-new-key-2222"})
+        assert resp.status_code == 200
+
+        # Verify new key is in effect via plain endpoint
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert keys["TEST_API_KEY"] == "sk-new-key-2222"
+
+    def test_delete_key_by_empty_value(self, client):
+        """POST /api/keys with empty value should delete the key."""
+        # Save key first
+        client.post("/api/keys", json={"TEST_DELETE_KEY": "sk-delete-me"})
+        # Verify it exists
+        resp = client.get("/api/keys/plain")
+        assert "TEST_DELETE_KEY" in resp.json()["keys"]
+
+        # Delete by sending empty string
+        resp = client.post("/api/keys", json={"TEST_DELETE_KEY": ""})
+        assert resp.status_code == 200
+
+        # Verify deletion
+        resp = client.get("/api/keys/plain")
+        assert "TEST_DELETE_KEY" not in resp.json()["keys"]
+
+    def test_masked_value_skips_update(self, client):
+        """POST /api/keys with masked value should NOT overwrite existing key."""
+        # Save a key
+        client.post("/api/keys", json={"TEST_KEEP_KEY": "sk-real-secret-key"})
+        # Get its masked form
+        resp = client.get("/api/keys/masked")
+        masked = resp.json()["keys"]["TEST_KEEP_KEY"]
+
+        # Send the masked value back (user didn't change it)
+        resp = client.post("/api/keys", json={"TEST_KEEP_KEY": masked})
+        assert resp.status_code == 200
+
+        # Verify original key is preserved (not replaced with masked string)
+        resp = client.get("/api/keys/plain")
+        assert resp.json()["keys"]["TEST_KEEP_KEY"] == "sk-real-secret-key"
+
+    def test_plain_endpoint(self, client):
+        """GET /api/keys/plain should return decrypted keys."""
+        client.post("/api/keys", json={"PLAIN_TEST": "sk-plaintext-value"})
+        resp = client.get("/api/keys/plain")
+        assert resp.status_code == 200
+        keys = resp.json()["keys"]
+        assert keys["PLAIN_TEST"] == "sk-plaintext-value"
+
+    def test_multiple_keys_independent(self, client):
+        """Saving one key should not affect other keys."""
+        client.post("/api/keys", json={"KEY_A": "sk-aaa", "KEY_B": "sk-bbb"})
+        # Delete only KEY_A
+        client.post("/api/keys", json={"KEY_A": ""})
+        # KEY_B should still exist
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert "KEY_A" not in keys
+        assert keys["KEY_B"] == "sk-bbb"
+
+    def test_untouched_fields_preserved(self, client):
+        """Fields not included in POST should remain unchanged."""
+        client.post("/api/keys", json={"KEY_X": "sk-xxx", "KEY_Y": "sk-yyy"})
+        # Update only KEY_X, don't send KEY_Y at all
+        client.post("/api/keys", json={"KEY_X": "sk-xxx-new"})
+        # KEY_Y should still be there
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert keys["KEY_X"] == "sk-xxx-new"
+        assert keys["KEY_Y"] == "sk-yyy"
+
+
+# ── Test: Legacy File Migration ─────────────────────
+
+class TestLegacyMigration:
+    """Test migration from legacy file paths to DATA_DIR."""
+
+    def test_migration_copies_file(self, tmp_path):
+        """Legacy file should be copied to DATA_DIR if new path doesn't exist."""
+        from server import _migrate_legacy_file
+
+        legacy = tmp_path / "old_keys.json"
+        legacy.write_text('{"test": "value"}')
+        new_path = tmp_path / "data" / "new_keys.json"
+
+        _migrate_legacy_file(legacy, new_path)
+        assert new_path.exists()
+        assert new_path.read_text() == '{"test": "value"}'
+
+    def test_migration_does_not_overwrite(self, tmp_path):
+        """Migration should NOT overwrite existing files in DATA_DIR."""
+        from server import _migrate_legacy_file
+
+        legacy = tmp_path / "old.json"
+        legacy.write_text('{"old": true}')
+        new_path = tmp_path / "data" / "new.json"
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        new_path.write_text('{"existing": true}')
+
+        _migrate_legacy_file(legacy, new_path)
+        # Should keep existing, not overwrite
+        assert '"existing": true' in new_path.read_text()
+
+    def test_migration_skips_missing_legacy(self, tmp_path):
+        """Migration should be a no-op if legacy file doesn't exist."""
+        from server import _migrate_legacy_file
+
+        legacy = tmp_path / "nonexistent.json"
+        new_path = tmp_path / "data" / "new.json"
+
+        _migrate_legacy_file(legacy, new_path)
+        assert not new_path.exists()
