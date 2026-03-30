@@ -1,5 +1,7 @@
-httpx[http2]>=0.27
-fastapi>=0.115
-uvicorn[standard]>=0.34
-gunicorn>=22.0
-cryptography>=42.0
+# RouterAI Dependencies — Pinned versions for reproducible builds
+httpx[http2]>=0.27,<1.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+gunicorn>=22.0,<24.0
+cryptography>=42.0,<45.0
+pydantic>=2.0,<3.0

@@ -14,7 +14,9 @@ Built with FastAPI + SQLite for production performance.
 import hashlib
 import json
 import logging
+import logging.config
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -23,11 +25,41 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
+# ── Pydantic Config Validation ──────────────────────
+try:
+    from pydantic import BaseModel, Field, field_validator
+
+    class ProxyConfigModel(BaseModel):
+        """Validated proxy configuration."""
+        prefer_free: bool = True
+        auto_failover: bool = True
+        cache_enabled: bool = True
+        cache_ttl: int = Field(default=3600, ge=60, le=86400)
+        budget_daily_usd: float = Field(default=0.0, ge=0.0)
+        budget_action: str = Field(default="downgrade", pattern=r"^(block|downgrade)$")
+        max_retries: int = Field(default=3, ge=1, le=10)
+        timeout: int = Field(default=30, ge=5, le=300)
+        stream_timeout: int = Field(default=60, ge=10, le=600)
+        rate_limit_rpm: int = Field(default=0, ge=0)
+        rate_limit_rpm_per_key: int = Field(default=0, ge=0)
+
+        @field_validator("budget_action")
+        @classmethod
+        def validate_budget_action(cls, v: str) -> str:
+            if v not in ("block", "downgrade"):
+                raise ValueError("budget_action must be 'block' or 'downgrade'")
+            return v
+
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
 
 # ── Config ──────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
@@ -45,11 +77,45 @@ STATS_DB = DATA_DIR / "stats.db"
 WEB_DIR = BASE_DIR / "web"
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+LOG_FORMAT = os.environ.get("ROUTERAI_LOG_FORMAT", "text").lower()
+
+
+class _JsonFormatter(logging.Formatter):
+    """Structured JSON log formatter for production use."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "ts": datetime.now().isoformat() + "Z",
+            "level": record.levelname.lower(),
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0]:
+            log_entry["exc"] = self.formatException(record.exc_info)
+        # Merge extra fields (filter out std attrs)
+        std_attrs = {
+            "name", "msg", "args", "created", "filename", "funcName",
+            "levelname", "levelno", "lineno", "module", "msecs",
+            "pathname", "process", "processName", "relativeCreated",
+            "stack_info", "thread", "threadName", "exc_info", "exc_text",
+        }
+        for key, val in record.__dict__.items():
+            if key not in std_attrs and not key.startswith("_"):
+                log_entry[key] = val
+        return json.dumps(log_entry, ensure_ascii=False, default=str)
+
+
+if LOG_FORMAT == "json":
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(_JsonFormatter())
+    logging.root.handlers = [_handler]
+    logging.root.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+else:
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL, logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 log = logging.getLogger("routerai")
 
 
@@ -125,6 +191,13 @@ def load_proxy_config():
     }
     cfg = load_json_file(PROXY_CONFIG_FILE, {})
     defaults.update(cfg)
+    # Validate with Pydantic if available
+    if HAS_PYDANTIC:
+        try:
+            validated = ProxyConfigModel(**defaults)
+            return validated.model_dump()
+        except Exception as e:
+            log.error(f"Config validation error: {e} — using raw config with defaults")
     return defaults
 
 
@@ -405,6 +478,56 @@ class StatsDB:
             )
             return round(cur.fetchone()[0], 4)
 
+    def get_cost_graph(self, days=30):
+        """Return daily cost breakdown for cost graph visualization."""
+        self._ensure_conn()
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        with self._lock:
+            # Daily costs
+            cur = self._conn.execute(
+                "SELECT SUBSTR(ts, 1, 10) AS day, "
+                "COALESCE(SUM(cost_usd), 0) AS total_cost, "
+                "COUNT(*) AS requests, "
+                "SUM(tokens_in + tokens_out) AS tokens "
+                "FROM requests WHERE ts > ? GROUP BY day ORDER BY day",
+                (cutoff,),
+            )
+            daily = []
+            for row in cur.fetchall():
+                daily.append({
+                    "date": row[0],
+                    "cost_usd": round(row[1], 4),
+                    "requests": row[2],
+                    "tokens": row[3] or 0,
+                })
+
+            # Cost by provider
+            cur = self._conn.execute(
+                "SELECT provider, COALESCE(SUM(cost_usd), 0), COUNT(*) "
+                "FROM requests WHERE ts > ? GROUP BY provider ORDER BY SUM(cost_usd) DESC",
+                (cutoff,),
+            )
+            by_provider = []
+            for row in cur.fetchall():
+                by_provider.append({
+                    "provider": row[0],
+                    "cost_usd": round(row[1], 4),
+                    "requests": row[2],
+                })
+
+            # Cumulative cost
+            cumulative = 0.0
+            for d in daily:
+                cumulative += d["cost_usd"]
+                d["cumulative_usd"] = round(cumulative, 4)
+
+        return {
+            "period_days": days,
+            "total_cost_usd": round(cumulative, 4),
+            "daily": daily,
+            "by_provider": by_provider,
+        }
+
     def get_latency_stats(self, days=7):
         """Return per-provider latency stats (p50, p95, avg)."""
         self._ensure_conn()
@@ -523,7 +646,7 @@ class ProviderManager:
                 if val:
                     self.api_keys[env_key] = val
 
-    def get_available_providers(self, model_filter=None, vision_only=False):
+    def get_available_providers(self, model_filter=None, vision_only=False, task_type=None):
         self._reload_keys_from_env()
         available = []
         for pid, provider in self.providers.items():
@@ -538,6 +661,11 @@ class ProviderManager:
                 models = [m for m in models if m.get("vision")]
             if model_filter:
                 models = [m for m in models if model_filter in m["id"]]
+            if task_type:
+                # Boost models that match the task type
+                task_models = [m for m in models if self._model_matches_task(m, pid, task_type)]
+                if task_models:
+                    models = task_models  # Prefer task-matched models
             if models:
                 available.append(
                     {
@@ -555,6 +683,52 @@ class ProviderManager:
         )
         return available
 
+    @staticmethod
+    def _model_matches_task(model: dict, provider_id: str, task_type: str) -> bool:
+        """Check if a model/provider combination is a good match for a task type."""
+        mid = model.get("id", "").lower()
+        desc = model.get("desc", "").lower()
+        if task_type == "coding":
+            return any(kw in mid or kw in desc for kw in ["coder", "code", "deepseek"])
+        if task_type == "creative":
+            return any(kw in mid or kw in desc for kw in ["claude", "gpt-4", "gemini-pro", "pro"])
+        if task_type == "fast":
+            return model.get("free", False) and model.get("priority", 0) >= 90
+        return True
+
+    @staticmethod
+    def detect_task_type(messages: list) -> str:
+        """Detect task type from message content for smart routing."""
+        if not messages:
+            return "general"
+        last_msg = ""
+        for msg in reversed(messages):
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                last_msg = content.lower()
+                break
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        last_msg = part.get("text", "").lower()
+                        break
+        if not last_msg:
+            return "general"
+        # Coding signals
+        code_keywords = ["code", "coding", "function", "class", "def ", "import ", "programming",
+                         "bug", "debug", "refactor", "implement", "algorithm", "script",
+                         "python", "javascript", "typescript", "rust", "golang", "html", "css",
+                         "เขียนโค้ด", "โปรแกรม", "debug"]
+        if any(kw in last_msg for kw in code_keywords):
+            return "coding"
+        # Creative signals
+        creative_keywords = ["write a story", "creative", "poem", "fiction", "narrative",
+                             "essay", "blog post", "marketing", "copywriting", "compose",
+                             "เขียนเรื่อง", "กลอน", "แต่งกลอน", "บทความ"]
+        if any(kw in last_msg for kw in creative_keywords):
+            return "creative"
+        return "general"
+
     def get_api_key(self, provider_id):
         provider = self.providers.get(provider_id, {})
         env_key = provider.get("api_key_env")
@@ -562,14 +736,14 @@ class ProviderManager:
             return "ollama"
         return self.api_keys.get(env_key) or os.environ.get(env_key)
 
-    def resolve_model(self, requested_model):
+    def resolve_model(self, requested_model, task_type=None):
         if "/" in requested_model:
             provider_hint, model_id = requested_model.split("/", 1)
         else:
             provider_hint = None
             model_id = requested_model
 
-        available = self.get_available_providers()
+        available = self.get_available_providers(task_type=task_type)
 
         if provider_hint:
             for p in available:
@@ -586,6 +760,20 @@ class ProviderManager:
                     return p, m
 
         if available:
+            # Latency-aware selection: prefer provider with lowest avg latency
+            latency_stats = self.stats.get_latency_stats(days=1)
+            provider_latencies = {
+                ps["provider"]: ps["avg_ms"]
+                for ps in latency_stats.get("providers", {}).values()
+                if ps["count"] >= 3  # Need at least 3 samples for meaningful avg
+            }
+            # Sort available by: task-match priority first, then latency
+            def _sort_key(p):
+                top_priority = max((m.get("priority", 0) for m in p["models"]), default=0)
+                latency = provider_latencies.get(p["id"], 9999)
+                # Lower is better for latency, higher is better for priority
+                return (-top_priority, latency)
+            available.sort(key=_sort_key)
             p = available[0]
             return p, p["models"][0]
         return None, None
@@ -732,9 +920,14 @@ def close_http_client():
 ROUTERAI_API_KEY = os.environ.get("ROUTERAI_API_KEY", "")
 DASHBOARD_PASSWORD = os.environ.get("ROUTERAI_DASHBOARD_PASSWORD", "")
 DASHBOARD_AUTH_ENABLED = bool(DASHBOARD_PASSWORD)
-CORS_ORIGINS_ENV = os.environ.get("ROUTERAI_CORS_ORIGINS", "http://localhost:*,http://127.0.0.1:*")
+CORS_ORIGINS_ENV = os.environ.get("ROUTERAI_CORS_ORIGINS", "")
 # Parse CORS: support comma-separated origins, strip whitespace
-CORS_ORIGINS = [o.strip() for o in CORS_ORIGINS_ENV.split(",") if o.strip()]
+# Default: explicit localhost origins only (no wildcard port matching in production)
+if CORS_ORIGINS_ENV:
+    CORS_ORIGINS = [o.strip() for o in CORS_ORIGINS_ENV.split(",") if o.strip()]
+else:
+    # Safe defaults: only specific localhost ports, no wildcards
+    CORS_ORIGINS = ["http://localhost:8900", "http://127.0.0.1:8900"]
 
 manager = ProviderManager()
 cache = ResponseCache()
@@ -990,6 +1183,11 @@ async def chat_completions(request: Request):
     requested_model = body.get("model", "llama-3.3-70b-versatile")
     stream = body.get("stream", False)
 
+    # Detect task type for smart routing
+    task_type = ProviderManager.detect_task_type(messages)
+    if task_type != "general":
+        log.info(f"Detected task type: {task_type} for model routing")
+
     # Check daily budget
     budget_exceeded, budget_spent, budget_limit = manager.check_budget()
     if budget_exceeded:
@@ -1053,9 +1251,9 @@ async def chat_completions(request: Request):
                     break
             if not provider:
                 # Fall back to resolve_model if explicit user requested a model
-                provider, model = manager.resolve_model(requested_model)
+                provider, model = manager.resolve_model(requested_model, task_type=task_type)
         else:
-            provider, model = manager.resolve_model(requested_model)
+            provider, model = manager.resolve_model(requested_model, task_type=task_type)
 
         if not provider or not model:
             break
@@ -1710,6 +1908,12 @@ async def api_latency_stats(days: int = 7):
                 "fast_rate": round((row[6] or 0) / total * 100, 1),
             })
     return {"period_days": days, "providers": results}
+
+
+@app.get("/api/stats/cost-graph")
+async def api_cost_graph(days: int = 30):
+    """Daily cost breakdown for cost graph visualization."""
+    return manager.stats.get_cost_graph(days=days)
 
 
 @app.post("/api/test/{provider_id}")

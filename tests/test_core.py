@@ -554,3 +554,133 @@ class TestLegacyMigration:
 
         _migrate_legacy_file(legacy, new_path)
         assert not new_path.exists()
+
+
+# ── Test: Task Type Detection ───────────────────────
+
+class TestTaskTypeDetection:
+    """Test smart routing task type detection."""
+
+    def test_detects_coding_task(self):
+        from server import ProviderManager
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "Write a Python function to sort a list"}]
+        ) == "coding"
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "ช่วยเขียนโค้ด Python หน่อย"}]
+        ) == "coding"
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "Debug this JavaScript code"}]
+        ) == "coding"
+
+    def test_detects_creative_task(self):
+        from server import ProviderManager
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "Write a story about a dragon"}]
+        ) == "creative"
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "แต่งกลอนวันแม่ให้หน่อย"}]
+        ) == "creative"
+
+    def test_detects_general_task(self):
+        from server import ProviderManager
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "What is the capital of France?"}]
+        ) == "general"
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": "Translate hello to Thai"}]
+        ) == "general"
+
+    def test_empty_messages_returns_general(self):
+        from server import ProviderManager
+        assert ProviderManager.detect_task_type([]) == "general"
+
+    def test_multimodal_content(self):
+        from server import ProviderManager
+        assert ProviderManager.detect_task_type(
+            [{"role": "user", "content": [
+                {"type": "text", "text": "Write a poem about this image"},
+                {"type": "image_url", "image_url": {"url": "data:..."}}
+            ]}]
+        ) == "creative"
+
+
+# ── Test: Cost Graph Endpoint ──────────────────────
+
+class TestCostGraph:
+    """Test cost graph API endpoint."""
+
+    def test_cost_graph_empty(self, client):
+        resp = client.get("/api/stats/cost-graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "daily" in data
+        assert "by_provider" in data
+        assert "total_cost_usd" in data
+        assert "period_days" in data
+
+    def test_cost_graph_with_data(self, tmp_path):
+        from server import StatsDB
+        from unittest.mock import patch
+        with patch("server.DATA_DIR", tmp_path), \
+             patch("server.STATS_DB", tmp_path / "stats.db"):
+            stats = StatsDB()
+            stats.record("groq", "llama-3.3-70b-versatile", 100, 200, 500, True, cost_usd=0.001)
+            stats.record("google", "gemini-2.0-flash", 200, 300, 300, True, cost_usd=0.002)
+            result = stats.get_cost_graph(days=7)
+            assert result["total_cost_usd"] >= 0.003
+            assert len(result["daily"]) >= 1
+            assert len(result["by_provider"]) >= 1
+
+
+# ── Test: Pydantic Config Validation ───────────────
+
+class TestPydanticValidation:
+    """Test config validation with Pydantic."""
+
+    def test_valid_config(self):
+        from server import HAS_PYDANTIC
+        if not HAS_PYDANTIC:
+            pytest.skip("pydantic not installed")
+        from server import ProxyConfigModel
+        cfg = ProxyConfigModel(prefer_free=True, cache_ttl=3600)
+        assert cfg.cache_ttl == 3600
+
+    def test_invalid_cache_ttl(self):
+        from server import HAS_PYDANTIC
+        if not HAS_PYDANTIC:
+            pytest.skip("pydantic not installed")
+        from server import ProxyConfigModel
+        import pydantic
+        with pytest.raises(pydantic.ValidationError):
+            ProxyConfigModel(cache_ttl=10)  # Too low (min 60)
+
+    def test_invalid_budget_action(self):
+        from server import HAS_PYDANTIC
+        if not HAS_PYDANTIC:
+            pytest.skip("pydantic not installed")
+        from server import ProxyConfigModel
+        import pydantic
+        with pytest.raises(pydantic.ValidationError):
+            ProxyConfigModel(budget_action="invalid")
+
+
+# ── Test: Structured Logging ────────────────────────
+
+class TestStructuredLogging:
+    """Test JSON structured logging formatter."""
+
+    def test_json_formatter_output(self):
+        import logging
+        from server import _JsonFormatter
+        formatter = _JsonFormatter()
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="", lineno=0,
+            msg="test message", args=(), exc_info=None
+        )
+        output = formatter.format(record)
+        parsed = json.loads(output)
+        assert parsed["level"] == "info"
+        assert parsed["msg"] == "test message"
+        assert parsed["logger"] == "test"
+        assert "ts" in parsed

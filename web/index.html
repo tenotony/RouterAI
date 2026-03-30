@@ -1267,6 +1267,11 @@ select.form-input { cursor: pointer; }
     <div class="stats-row" id="analytics-stats"></div>
 
     <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:16px;">💰 Daily Cost Breakdown</h3>
+      <div id="cost-chart" style="min-height:200px;"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-bottom:16px;">📊 การใช้งานรายวัน</h3>
       <div id="analytics-chart" style="min-height:200px;"></div>
     </div>
@@ -2032,6 +2037,46 @@ async function loadAnalytics(days, clickedBtn) {
       chartEl.innerHTML = chartHtml;
     } else {
       chartEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;">ยังไม่มีข้อมูล — เริ่มใช้งานเพื่อดูสถิติ</div>';
+    }
+
+    // Cost graph
+    try {
+      const costRes = await fetch(`/api/stats/cost-graph?days=${days}`);
+      const costData = await costRes.json();
+      const costDaily = costData.daily || [];
+      const costChartEl = document.getElementById('cost-chart');
+      if (costDaily.length > 0) {
+        const maxCost = Math.max(...costDaily.map(d => d.cost_usd || 0), 0.001);
+        let costHtml = '<div style="display:flex;align-items:flex-end;gap:4px;height:160px;padding:0 4px;">';
+        costDaily.forEach(d => {
+          const h = Math.max(3, ((d.cost_usd || 0) / maxCost) * 140);
+          const dateLabel = (d.date || '').substring(5);
+          costHtml += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;" title="$${d.cost_usd} on ${d.date}">
+            <div style="font-size:0.6rem;color:var(--text3);">$${(d.cost_usd || 0).toFixed(3)}</div>
+            <div style="width:100%;height:${h}px;background:linear-gradient(180deg,var(--green),#059669);border-radius:4px 4px 0 0;min-height:3px;"></div>
+            <div style="font-size:0.6rem;color:var(--text3);">${dateLabel}</div>
+          </div>`;
+        });
+        costHtml += '</div>';
+        // Add cumulative total
+        const totalCost = costData.total_cost_usd || 0;
+        costHtml += `<div style="text-align:center;margin-top:10px;font-size:0.8rem;color:var(--text2);">Total: <strong style="color:var(--green);">$${totalCost.toFixed(4)}</strong> over ${costData.period_days} days</div>`;
+        // By provider breakdown
+        if (costData.by_provider && costData.by_provider.length > 0) {
+          costHtml += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;justify-content:center;">';
+          costData.by_provider.forEach(p => {
+            if (p.cost_usd > 0) {
+              costHtml += `<span style="font-size:0.7rem;color:var(--text3);background:var(--bg3);padding:3px 8px;border-radius:6px;">${p.provider}: $${p.cost_usd.toFixed(4)}</span>`;
+            }
+          });
+          costHtml += '</div>';
+        }
+        costChartEl.innerHTML = costHtml;
+      } else {
+        costChartEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px;">ยังไม่มีข้อมูลค่าใช้จ่าย</div>';
+      }
+    } catch(e) {
+      document.getElementById('cost-chart').innerHTML = `<div style="text-align:center;color:var(--text3);padding:20px;">Cost graph unavailable</div>`;
     }
 
     // Provider breakdown
