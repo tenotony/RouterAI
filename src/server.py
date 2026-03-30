@@ -558,14 +558,23 @@ class ResponseCache:
         self._enabled = enabled
         self._ttl = ttl
 
-    def _key(self, messages, model):
-        content = json.dumps({"messages": messages, "model": model}, sort_keys=True)
+    # Parameters that affect model output and must be included in cache key
+    _CACHE_PARAMS = ("temperature", "top_p", "max_tokens", "frequency_penalty",
+                     "presence_penalty", "stop", "seed", "n")
+
+    def _key(self, messages, model, params=None):
+        cache_data = {"messages": messages, "model": model}
+        if params:
+            for p in self._CACHE_PARAMS:
+                if p in params:
+                    cache_data[p] = params[p]
+        content = json.dumps(cache_data, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def get(self, messages, model):
+    def get(self, messages, model, params=None):
         if not self._enabled:
             return None
-        key = self._key(messages, model)
+        key = self._key(messages, model, params)
         path = CACHE_DIR / f"{key}.json"
         if path.exists():
             age = time.time() - path.stat().st_mtime
@@ -580,8 +589,8 @@ class ResponseCache:
         self._misses += 1
         return None
 
-    def set(self, messages, model, response):
-        key = self._key(messages, model)
+    def set(self, messages, model, response, params=None):
+        key = self._key(messages, model, params)
         path = CACHE_DIR / f"{key}.json"
         save_json_file(path, response)
 
@@ -873,7 +882,7 @@ async def chat_completions(request: Request):
     stream = body.get("stream", False)
 
     # Check cache
-    cached = cache.get(messages, requested_model)
+    cached = cache.get(messages, requested_model, body)
     if cached:
         log.info(f"Cache hit for model={requested_model}")
         if stream:
@@ -937,7 +946,7 @@ async def chat_completions(request: Request):
                     latency,
                     True,
                 )
-                cache.set(messages, requested_model, result)
+                cache.set(messages, requested_model, result, body)
                 return result
 
             except httpx.HTTPStatusError as e:
