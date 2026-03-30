@@ -35,9 +35,9 @@
     "api_base": "https://generativelanguage.googleapis.com/v1beta/openai",
     "api_key_env": "GOOGLE_API_KEY",
     "models": [
-      {"id": "gemini-2.0-flash", "context": 1048576, "free": true, "priority": 88, "desc": "Flash รุ่นล่าสุด ฟรี Vision"},
-      {"id": "gemini-1.5-flash", "context": 1048576, "free": true, "priority": 85, "desc": "ฟรี Vision"},
-      {"id": "gemini-1.5-pro", "context": 2097152, "free": true, "priority": 80, "desc": "Pro ฟรี 2M context"}
+      {"id": "gemini-2.0-flash", "context": 1048576, "free": true, "priority": 88, "desc": "Flash รุ่นล่าสุด ฟรี Vision", "vision": true},
+      {"id": "gemini-1.5-flash", "context": 1048576, "free": true, "priority": 85, "desc": "ฟรี Vision", "vision": true},
+      {"id": "gemini-1.5-pro", "context": 2097152, "free": true, "priority": 80, "desc": "Pro ฟรี 2M context", "vision": true}
     ],
     "rate_limit": {"rpm": 15, "tpm": 1000000},
     "speed": "⚡⚡⚡⚡",
@@ -70,8 +70,8 @@
       {"id": "microsoft/phi-3-mini-128k-instruct:free", "context": 128000, "free": true, "priority": 72, "desc": "Phi-3 ฟรี"},
       {"id": "xiaomi/mimo-v2-flash", "context": 262144, "free": false, "cost_per_1k": 0.00009, "priority": 88, "desc": "MiMo V2 Flash ผ่าน OpenRouter"},
       {"id": "xiaomi/mimo-v2-pro", "context": 65536, "free": false, "cost_per_1k": 0.0004, "priority": 86, "desc": "MiMo V2 Pro ผ่าน OpenRouter"},
-      {"id": "anthropic/claude-3.5-sonnet", "context": 200000, "free": false, "cost_per_1k": 0.003, "priority": 70, "desc": "Claude 3.5 จ่ายเงิน"},
-      {"id": "openai/gpt-4o", "context": 128000, "free": false, "cost_per_1k": 0.005, "priority": 65, "desc": "GPT-4o จ่ายเงิน"}
+      {"id": "anthropic/claude-3.5-sonnet", "context": 200000, "free": false, "cost_per_1k": 0.003, "priority": 70, "desc": "Claude 3.5 จ่ายเงิน", "vision": true},
+      {"id": "openai/gpt-4o", "context": 128000, "free": false, "cost_per_1k": 0.005, "priority": 65, "desc": "GPT-4o จ่ายเงิน", "vision": true}
     ],
     "rate_limit": {"rpm": 20, "tpm": 40000},
     "speed": "⚡⚡⚡",

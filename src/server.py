@@ -120,7 +120,8 @@ def load_proxy_config():
         "max_retries": 3,
         "timeout": 30,           # non-streaming timeout (seconds)
         "stream_timeout": 60,    # streaming timeout (seconds)
-        "rate_limit_rpm": 0,     # 0 = unlimited
+        "rate_limit_rpm": 0,     # 0 = unlimited (per IP)
+        "rate_limit_rpm_per_key": 0,  # 0 = unlimited (per API key)
     }
     cfg = load_json_file(PROXY_CONFIG_FILE, {})
     defaults.update(cfg)
@@ -262,6 +263,7 @@ class StatsDB:
                     model TEXT NOT NULL,
                     tokens_in INTEGER DEFAULT 0,
                     tokens_out INTEGER DEFAULT 0,
+                    cost_usd REAL DEFAULT 0,
                     latency_ms INTEGER DEFAULT 0,
                     success INTEGER DEFAULT 1,
                     error TEXT
@@ -277,6 +279,12 @@ class StatsDB:
                     last_check TEXT
                 );
             """)
+            # Migrate: add cost_usd column if missing (older DBs)
+            try:
+                self._conn.execute("SELECT cost_usd FROM requests LIMIT 1")
+            except sqlite3.OperationalError:
+                self._conn.execute("ALTER TABLE requests ADD COLUMN cost_usd REAL DEFAULT 0")
+                log.info("Migrated stats DB: added cost_usd column")
             self._conn.commit()
 
     def _cleanup_old(self):
@@ -286,14 +294,14 @@ class StatsDB:
             self._conn.execute("DELETE FROM requests WHERE ts < ?", (cutoff,))
             self._conn.commit()
 
-    def record(self, provider, model, tokens_in, tokens_out, latency_ms, success, error=None):
+    def record(self, provider, model, tokens_in, tokens_out, latency_ms, success, error=None, cost_usd=0.0):
         self._ensure_conn()
         now = datetime.now().isoformat()
         with self._lock:
             self._conn.execute(
-                "INSERT INTO requests (ts, provider, model, tokens_in, tokens_out, latency_ms, success, error) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (now, provider, model, tokens_in, tokens_out, latency_ms, int(success), error),
+                "INSERT INTO requests (ts, provider, model, tokens_in, tokens_out, cost_usd, latency_ms, success, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (now, provider, model, tokens_in, tokens_out, round(cost_usd, 6), latency_ms, int(success), error),
             )
             # Upsert provider health
             self._conn.execute(
@@ -316,7 +324,7 @@ class StatsDB:
         with self._lock:
             cur = self._conn.execute(
                 "SELECT COUNT(*), SUM(success), SUM(CASE WHEN success=0 THEN 1 ELSE 0 END), "
-                "SUM(tokens_in), SUM(tokens_out), AVG(latency_ms) "
+                "SUM(tokens_in), SUM(tokens_out), AVG(latency_ms), SUM(cost_usd) "
                 "FROM requests WHERE ts > ?",
                 (cutoff,),
             )
@@ -327,10 +335,11 @@ class StatsDB:
             total_tokens_in = row[3] or 0
             total_tokens_out = row[4] or 0
             avg_latency = round(row[5] or 0)
+            total_cost = round(row[6] or 0, 4)
 
             # By provider
             cur = self._conn.execute(
-                "SELECT provider, COUNT(*), SUM(success), SUM(tokens_in + tokens_out), AVG(latency_ms) "
+                "SELECT provider, COUNT(*), SUM(success), SUM(tokens_in + tokens_out), AVG(latency_ms), SUM(cost_usd) "
                 "FROM requests WHERE ts > ? GROUP BY provider",
                 (cutoff,),
             )
@@ -341,11 +350,12 @@ class StatsDB:
                     "success": prow[2] or 0,
                     "tokens": prow[3] or 0,
                     "avg_latency": round(prow[4] or 0),
+                    "cost_usd": round(prow[5] or 0, 4),
                 }
 
             # Daily breakdown
             cur = self._conn.execute(
-                "SELECT SUBSTR(ts, 1, 10) AS day, COUNT(*), SUM(success), SUM(tokens_in + tokens_out) "
+                "SELECT SUBSTR(ts, 1, 10) AS day, COUNT(*), SUM(success), SUM(tokens_in + tokens_out), SUM(cost_usd) "
                 "FROM requests WHERE ts > ? GROUP BY day ORDER BY day",
                 (cutoff,),
             )
@@ -356,6 +366,7 @@ class StatsDB:
                     "requests": drow[1],
                     "success": drow[2] or 0,
                     "tokens": drow[3] or 0,
+                    "cost_usd": round(drow[4] or 0, 4),
                 })
 
             # Provider health
@@ -376,11 +387,52 @@ class StatsDB:
             "failed_requests": fail_count,
             "total_tokens_in": total_tokens_in,
             "total_tokens_out": total_tokens_out,
+            "total_cost_usd": total_cost,
             "avg_latency_ms": avg_latency,
             "by_provider": by_provider,
             "daily": daily,
             "provider_health": provider_health,
         }
+
+    def get_daily_cost(self):
+        """Return today's total cost in USD."""
+        self._ensure_conn()
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM requests WHERE SUBSTR(ts, 1, 10) = ?",
+                (today,),
+            )
+            return round(cur.fetchone()[0], 4)
+
+    def get_latency_stats(self, days=7):
+        """Return per-provider latency stats (p50, p95, avg)."""
+        self._ensure_conn()
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT provider, latency_ms FROM requests WHERE ts > ? AND success = 1 ORDER BY provider, latency_ms",
+                (cutoff,),
+            )
+            rows = cur.fetchall()
+
+        from collections import defaultdict
+        by_provider = defaultdict(list)
+        for prov, lat in rows:
+            by_provider[prov].append(lat)
+
+        result = {}
+        for prov, lats in by_provider.items():
+            n = len(lats)
+            result[prov] = {
+                "count": n,
+                "avg_ms": round(sum(lats) / n),
+                "p50_ms": lats[n // 2],
+                "p95_ms": lats[int(n * 0.95)] if n > 1 else lats[0],
+                "min_ms": lats[0],
+                "max_ms": lats[-1],
+            }
+        return {"providers": result, "period_days": days}
 
     def close(self):
         with self._lock:
@@ -392,46 +444,63 @@ class StatsDB:
 
 # ── Rate Limiter ────────────────────────────────────
 class RateLimiter:
-    """Token-bucket rate limiter per client IP."""
+    """Token-bucket rate limiter per client identity (IP + API key)."""
 
     def __init__(self):
         self._buckets: dict = {}
         self._lock = threading.Lock()
         self._rpm = 0
+        self._rpm_per_key = 0
 
-    def configure(self, rpm: int):
+    def configure(self, rpm: int, rpm_per_key: int = 0):
         self._rpm = rpm
+        self._rpm_per_key = rpm_per_key
         self._buckets.clear()
 
-    def _get_bucket(self, client_ip: str):
-        if client_ip not in self._buckets:
-            self._buckets[client_ip] = {"tokens": self._rpm, "last_refill": time.time()}
-        return self._buckets[client_ip]
+    def _get_bucket(self, identity: str, limit: int):
+        if identity not in self._buckets:
+            self._buckets[identity] = {"tokens": limit, "last_refill": time.time()}
+        return self._buckets[identity]
 
-    def is_allowed(self, client_ip: str) -> bool:
-        if self._rpm <= 0:
+    def _check_bucket(self, identity: str, limit: int) -> bool:
+        """Check and consume from a specific bucket. Returns True if allowed."""
+        if limit <= 0:
             return True
         with self._lock:
-            bucket = self._get_bucket(client_ip)
+            bucket = self._get_bucket(identity, limit)
             now = time.time()
             elapsed = now - bucket["last_refill"]
-            refill_rate = self._rpm / 60.0
-            bucket["tokens"] = min(self._rpm, bucket["tokens"] + elapsed * refill_rate)
+            refill_rate = limit / 60.0
+            bucket["tokens"] = min(limit, bucket["tokens"] + elapsed * refill_rate)
             bucket["last_refill"] = now
             if bucket["tokens"] >= 1:
                 bucket["tokens"] -= 1
                 return True
             return False
 
-    def get_wait_time(self, client_ip: str) -> float:
-        if self._rpm <= 0:
-            return 0
-        bucket = self._buckets.get(client_ip)
+    def is_allowed(self, client_ip: str, api_key: str = "") -> bool:
+        # Check per-IP limit
+        if not self._check_bucket(f"ip:{client_ip}", self._rpm):
+            return False
+        # Check per-key limit
+        if api_key and self._rpm_per_key > 0:
+            return self._check_bucket(f"key:{api_key}", self._rpm_per_key)
+        return True
+
+    def _get_bucket_wait(self, identity: str, limit: int) -> float:
+        bucket = self._buckets.get(identity)
         if not bucket or bucket["tokens"] >= 1:
             return 0
-        refill_rate = self._rpm / 60.0
+        refill_rate = limit / 60.0
         deficit = 1 - bucket["tokens"]
         return deficit / refill_rate if refill_rate > 0 else 1
+
+    def get_wait_time(self, client_ip: str, api_key: str = "") -> float:
+        wait_ip = self._get_bucket_wait(f"ip:{client_ip}", self._rpm) if self._rpm > 0 else 0
+        wait_key = 0
+        if api_key and self._rpm_per_key > 0:
+            wait_key = self._get_bucket_wait(f"key:{api_key}", self._rpm_per_key)
+        return max(wait_ip, wait_key)
 
 
 # ── Provider Manager ────────────────────────────────
@@ -454,7 +523,7 @@ class ProviderManager:
                 if val:
                     self.api_keys[env_key] = val
 
-    def get_available_providers(self, model_filter=None):
+    def get_available_providers(self, model_filter=None, vision_only=False):
         self._reload_keys_from_env()
         available = []
         for pid, provider in self.providers.items():
@@ -465,6 +534,8 @@ class ProviderManager:
             if time.time() < self._cooldown_until[pid]:
                 continue
             models = provider.get("models", [])
+            if vision_only:
+                models = [m for m in models if m.get("vision")]
             if model_filter:
                 models = [m for m in models if model_filter in m["id"]]
             if models:
@@ -537,6 +608,25 @@ class ProviderManager:
     def save_api_keys(self, keys):
         key_store.save_keys(keys)
         self.api_keys = key_store.load_keys()
+
+    def calc_cost(self, provider_id, model_id, tokens_in, tokens_out):
+        """Calculate cost in USD for a request based on provider's cost_per_1k."""
+        provider = self.providers.get(provider_id, {})
+        for m in provider.get("models", []):
+            if m["id"] == model_id:
+                cost_per_1k = m.get("cost_per_1k", 0)
+                if cost_per_1k:
+                    return (tokens_in + tokens_out) / 1000.0 * cost_per_1k
+                return 0.0
+        return 0.0
+
+    def check_budget(self):
+        """Check if daily budget is exceeded. Returns (exceeded, spent, limit)."""
+        limit = self.config.get("budget_daily_usd", 0)
+        if limit <= 0:
+            return False, 0, 0
+        spent = self.stats.get_daily_cost()
+        return spent >= limit, spent, limit
 
     def reload(self):
         self.providers = load_providers()
@@ -701,7 +791,7 @@ session_manager = SessionManager()
 async def lifespan(app: FastAPI):
     # Startup
     cache.update_config(manager.config.get("cache_enabled", True), manager.config.get("cache_ttl", 3600))
-    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0))
+    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0), manager.config.get("rate_limit_rpm_per_key", 0))
     log.info("RouterAI started")
     yield
     # Shutdown — flush stats and close connections
@@ -781,12 +871,16 @@ async def auth_and_rate_limit(request: Request, call_next):
 
     # /v1/* endpoints — proxy auth + rate limit
     if path.startswith("/v1/"):
+        # Extract API key from request for per-key rate limiting
+        auth = request.headers.get("Authorization", "")
+        provided_key = ""
+        if auth.startswith("Bearer "):
+            provided_key = auth[7:]
+        elif request.query_params.get("key"):
+            provided_key = request.query_params["key"]
+
         if ROUTERAI_API_KEY:
-            auth = request.headers.get("Authorization", "")
-            key_valid = (auth.startswith("Bearer ") and auth[7:] == ROUTERAI_API_KEY) or (
-                request.query_params.get("key") == ROUTERAI_API_KEY
-            )
-            if not key_valid:
+            if provided_key != ROUTERAI_API_KEY:
                 return JSONResponse(
                     status_code=401,
                     content={
@@ -799,8 +893,8 @@ async def auth_and_rate_limit(request: Request, call_next):
                 )
 
         client_ip = request.client.host if request.client else "unknown"
-        if not rate_limiter.is_allowed(client_ip):
-            wait = rate_limiter.get_wait_time(client_ip)
+        if not rate_limiter.is_allowed(client_ip, provided_key):
+            wait = rate_limiter.get_wait_time(client_ip, provided_key)
             return JSONResponse(
                 status_code=429,
                 content={
@@ -841,16 +935,19 @@ async def list_models():
     models = []
     for p in available:
         for m in p["models"]:
-            models.append(
-                {
-                    "id": f"{p['id']}/{m['id']}",
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": p["name"],
-                    "free": m.get("free", False),
-                    "context_length": m.get("context", 0),
-                }
-            )
+            entry = {
+                "id": f"{p['id']}/{m['id']}",
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": p["name"],
+                "free": m.get("free", False),
+                "context_length": m.get("context", 0),
+            }
+            if m.get("vision"):
+                entry["vision"] = True
+            if m.get("cost_per_1k"):
+                entry["cost_per_1k"] = m["cost_per_1k"]
+            models.append(entry)
     return {"object": "list", "data": models}
 
 
@@ -878,8 +975,38 @@ async def chat_completions(request: Request):
             content={"error": {"message": "Missing required field: messages", "type": "invalid_request_error"}},
         )
 
+    # Detect multimodal (vision) requests — images in message content
+    has_images = False
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    has_images = True
+                    break
+        if has_images:
+            break
+
     requested_model = body.get("model", "llama-3.3-70b-versatile")
     stream = body.get("stream", False)
+
+    # Check daily budget
+    budget_exceeded, budget_spent, budget_limit = manager.check_budget()
+    if budget_exceeded:
+        action = manager.config.get("budget_action", "downgrade")
+        if action == "block":
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "message": f"Daily budget exceeded (${budget_spent:.2f} / ${budget_limit:.2f}). Try again tomorrow.",
+                        "type": "budget_exceeded",
+                        "code": "daily_budget_limit",
+                    }
+                },
+            )
+        # "downgrade" mode: prefer free models (handled by routing already)
+        log.info(f"Daily budget ${budget_limit:.2f} exceeded (spent ${budget_spent:.2f}), downgrading to free models")
 
     # Check cache
     cached = cache.get(messages, requested_model, body)
@@ -897,14 +1024,44 @@ async def chat_completions(request: Request):
     tried_providers: set = set()
     last_error = None
 
+    # If request has images, prefer vision-capable providers
+    vision_capable_ids = set()
+    if has_images:
+        vision_providers = manager.get_available_providers(vision_only=True)
+        vision_capable_ids = {p["id"] for p in vision_providers}
+        if not vision_capable_ids:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "message": "Request contains images but no vision-capable provider is available. Add a Gemini, OpenRouter (GPT-4o/Claude), or other vision provider key.",
+                        "type": "vision_not_supported",
+                        "code": "no_vision_provider",
+                    }
+                },
+            )
+
     while True:
         # Pick next untried provider
-        provider, model = manager.resolve_model(requested_model)
+        if has_images and vision_capable_ids:
+            # For vision requests, resolve from vision-capable providers only
+            available_vision = manager.get_available_providers(vision_only=True)
+            provider, model = None, None
+            for p in available_vision:
+                if p["id"] not in tried_providers:
+                    provider, model = p, p["models"][0]
+                    break
+            if not provider:
+                # Fall back to resolve_model if explicit user requested a model
+                provider, model = manager.resolve_model(requested_model)
+        else:
+            provider, model = manager.resolve_model(requested_model)
+
         if not provider or not model:
             break
 
         if provider["id"] in tried_providers:
-            available = manager.get_available_providers()
+            available = manager.get_available_providers(vision_only=has_images)
             found = False
             for p in available:
                 if p["id"] not in tried_providers:
@@ -938,13 +1095,17 @@ async def chat_completions(request: Request):
 
                 manager.report_success(provider["id"])
                 usage = result.get("usage", {})
+                tokens_in = usage.get("prompt_tokens", 0)
+                tokens_out = usage.get("completion_tokens", 0)
+                cost = manager.calc_cost(provider["id"], model["id"], tokens_in, tokens_out)
                 manager.stats.record(
                     provider["id"],
                     model["id"],
-                    usage.get("prompt_tokens", 0),
-                    usage.get("completion_tokens", 0),
+                    tokens_in,
+                    tokens_out,
                     latency,
                     True,
+                    cost_usd=cost,
                 )
                 cache.set(messages, requested_model, result, body)
                 return result
@@ -1124,9 +1285,12 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
     payload = {k: v for k, v in body.items() if k not in ("stream",)}
     payload["model"] = model["id"]
     payload["stream"] = True
+    # Request usage in final chunk (supported by OpenAI-compatible providers)
+    payload["stream_options"] = {"include_usage": True}
 
     start_time = time.time()
     full_response = ""
+    usage_from_stream = None
 
     try:
         stream_timeout = manager.config.get("stream_timeout", 60)
@@ -1141,16 +1305,35 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
                             break
                         try:
                             chunk = json.loads(data)
+                            # Capture usage from final chunk if available
+                            if chunk.get("usage"):
+                                usage_from_stream = chunk["usage"]
                             if chunk.get("choices"):
                                 delta = chunk["choices"][0].get("delta", {})
                                 full_response += delta.get("content", "")
+                            # Don't forward stream_options chunk noise
+                            if not chunk.get("choices") and not chunk.get("usage"):
+                                yield f"data: {data}\n\n"
+                                continue
                             yield f"data: {data}\n\n"
                         except json.JSONDecodeError:
                             continue
 
         latency = int((time.time() - start_time) * 1000)
         manager.report_success(provider["id"])
-        manager.stats.record(provider["id"], model["id"], 0, len(full_response), latency, True)
+
+        # Use actual usage if available, otherwise estimate
+        if usage_from_stream:
+            tokens_in = usage_from_stream.get("prompt_tokens", 0)
+            tokens_out = usage_from_stream.get("completion_tokens", 0)
+        else:
+            # Estimate: ~4 chars per token (conservative)
+            prompt_text = json.dumps(messages, ensure_ascii=False)
+            tokens_in = len(prompt_text) // 4
+            tokens_out = len(full_response) // 4
+
+        cost = manager.calc_cost(provider["id"], model["id"], tokens_in, tokens_out)
+        manager.stats.record(provider["id"], model["id"], tokens_in, tokens_out, latency, True, cost_usd=cost)
 
     except httpx.HTTPStatusError as e:
         status = e.response.status_code if e.response else 0
@@ -1254,7 +1437,7 @@ async def api_status():
 async def api_providers():
     manager.reload()
     cache.update_config(manager.config.get("cache_enabled", True), manager.config.get("cache_ttl", 3600))
-    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0))
+    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0), manager.config.get("rate_limit_rpm_per_key", 0))
 
     available_ids = {p["id"] for p in manager.get_available_providers()}
     result = []
@@ -1368,7 +1551,7 @@ async def api_config_post(request: Request):
     save_json_file(PROXY_CONFIG_FILE, current)
     manager.reload()
     cache.update_config(manager.config.get("cache_enabled", True), manager.config.get("cache_ttl", 3600))
-    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0))
+    rate_limiter.configure(manager.config.get("rate_limit_rpm", 0), manager.config.get("rate_limit_rpm_per_key", 0))
     return {"status": "ok", "message": "บันทึกการตั้งค่าเรียบร้อย ✅"}
 
 
@@ -1820,13 +2003,41 @@ async def api_auth_status():
 
 # ── Health Check ────────────────────────────────────
 @app.get("/health")
-async def health():
+async def health(deep: bool = False):
+    """Health check endpoint. Pass ?deep=true to ping each provider."""
     available = manager.get_available_providers()
+    provider_status = {}
+
+    if deep:
+        # Actually ping each available provider's API base
+        client = get_http_client(timeout=5)
+        for p in available:
+            try:
+                resp = client.get(p["api_base"].rsplit("/v1", 1)[0], timeout=5)
+                provider_status[p["id"]] = {"reachable": True, "status_code": resp.status_code}
+            except Exception as e:
+                provider_status[p["id"]] = {"reachable": False, "error": str(e)[:100]}
+    else:
+        for p in available:
+            cooldown = manager._cooldown_until.get(p["id"], 0)
+            provider_status[p["id"]] = {
+                "available": True,
+                "in_cooldown": time.time() < cooldown,
+                "error_count": manager._error_counts.get(p["id"], 0),
+            }
+
+    budget_exceeded, budget_spent, budget_limit = manager.check_budget()
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "providers_available": len(available),
         "providers_total": len(manager.providers),
+        "provider_status": provider_status,
+        "budget": {
+            "daily_limit_usd": budget_limit,
+            "spent_today_usd": budget_spent,
+            "exceeded": budget_exceeded,
+        } if budget_limit > 0 else None,
         "version": "2.0.0",
     }
 
