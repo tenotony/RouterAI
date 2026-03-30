@@ -1517,6 +1517,7 @@ async function loadKeysForm() {
             </div>
             <div>
               ${maskedVal ? '<span class="badge badge-green">✅ มีแล้ว</span>' : '<span class="badge badge-yellow">ยังไม่ใส่</span>'}
+              ${maskedVal ? `<button class="btn btn-danger btn-sm" style="margin-left:6px;" onclick="deleteKey('${key}','${p.id}')" title="ลบ key นี้">🗑️</button>` : ''}
             </div>
           </div>
         `;
@@ -1533,6 +1534,12 @@ async function loadKeysForm() {
 }
 
 let keysVisible = false;
+// Clear revealed flag when user types in a revealed input
+document.addEventListener('input', (e) => {
+  if (e.target.matches && e.target.matches('#keys-list input[data-revealed]')) {
+    delete e.target.dataset.revealed;
+  }
+});
 async function toggleKeyVisibility() {
   keysVisible = !keysVisible;
   const inputs = document.querySelectorAll('#keys-list input');
@@ -1548,6 +1555,7 @@ async function toggleKeyVisibility() {
         if (actualKey) {
           input.value = actualKey;
           input.style.color = 'var(--green)';
+          input.dataset.revealed = 'true'; // mark as revealed (untouched)
         }
       });
     } catch(e) {
@@ -1555,11 +1563,12 @@ async function toggleKeyVisibility() {
       keysVisible = false;
     }
   } else {
-    // Hide: clear all inputs back to empty (password type)
+    // Hide: restore to empty + placeholder, clear revealed flag
     inputs.forEach(input => {
       input.type = 'password';
       input.value = '';
       input.style.color = '';
+      delete input.dataset.revealed;
     });
   }
 }
@@ -1569,12 +1578,14 @@ async function saveKeys() {
   let hasChange = false;
   document.querySelectorAll('#keys-list input[data-key]').forEach(input => {
     const key = input.dataset.key;
+    // If key was revealed but user didn't edit it, skip (treat as unchanged)
+    if (input.dataset.revealed === 'true') return;
     const val = input.value.trim();
     // Send every field — empty means "delete", non-empty means "set/overwrite"
     keys[key] = val;
     hasChange = true;
   });
-  if (!hasChange) { toast('ไม่พบ API Key ให้บันทึก', 'error'); return; }
+  if (!hasChange) { toast('ไม่มีการเปลี่ยนแปลง API Key', 'info'); return; }
   try {
     const res = await fetch('/api/keys', {
       method: 'POST',
@@ -1585,6 +1596,22 @@ async function saveKeys() {
     toast(data.message || 'บันทึกสำเร็จ');
     loadKeysForm();
   } catch(e) { toast('บันทึกล้มเหลว', 'error'); }
+}
+
+async function deleteKey(keyName, providerId) {
+  const provider = providersData.find(p => p.id === providerId);
+  const name = provider ? provider.name : keyName;
+  if (!confirm(`ลบ API Key ของ ${name} แน่ใจไหม?`)) return;
+  try {
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ [keyName]: '' })
+    });
+    const data = await res.json();
+    toast(`ลบ Key ของ ${name} สำเร็จ 🗑️`);
+    loadKeysForm();
+  } catch(e) { toast('ลบ Key ล้มเหลว', 'error'); }
 }
 
 // ── OpenClaw Page ──
