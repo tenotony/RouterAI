@@ -499,8 +499,9 @@ class ProviderManager:
         self._error_counts[provider_id] += 1
         self._last_error_time[provider_id] = time.time()
         count = self._error_counts[provider_id]
-        if count >= 3:
-            cooldown = min(30 * (2 ** (count - 3)), 300)
+        if count >= 5:  # Fix: was 3, now 5 — more forgiving
+            # Fix: Softer cooldown inspired by findfreeai: 15s → 30s → 60s → 120s (cap)
+            cooldown = min(15 * (2 ** (count - 5)), 120)
             self._cooldown_until[provider_id] = time.time() + cooldown
             log.warning(f"Provider {provider_id} cooldown {cooldown}s (error #{count}): {error}")
         else:
@@ -1065,10 +1066,18 @@ async def embeddings(request: Request):
 
 def _make_request(provider, model, body, api_key):
     """Make a non-streaming request to a provider."""
-    url = f"{provider['api_base']}/chat/completions"
+    # Fix: strip trailing slash to avoid double-slash URLs
+    api_base = provider["api_base"].rstrip("/")
+    url = f"{api_base}/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key and api_key != "ollama":
         headers["Authorization"] = f"Bearer {api_key}"
+
+    # Fix: Add provider-specific headers
+    # OpenRouter requires HTTP-Referer or may return 404/401
+    if "openrouter.ai" in api_base:
+        headers.setdefault("HTTP-Referer", "https://routerai.local")
+        headers.setdefault("X-Title", "RouterAI")
 
     payload = {k: v for k, v in body.items() if k not in ("stream",)}
     payload["model"] = model["id"]
@@ -1078,15 +1087,32 @@ def _make_request(provider, model, body, api_key):
     client = get_http_client(timeout)
     resp = client.post(url, json=payload, headers=headers)
     resp.raise_for_status()
-    return resp.json()
+
+    result = resp.json()
+    # Fix: Validate response - some providers return HTTP 200 with error body
+    if isinstance(result, dict) and "error" in result:
+        err_msg = result.get("error", {})
+        if isinstance(err_msg, dict):
+            err_msg = err_msg.get("message", str(err_msg))
+        raise httpx.HTTPStatusError(
+            str(err_msg),
+            request=resp.request,
+            response=resp,
+        )
+    return result
 
 
 async def _stream_request(provider, model, body, api_key, messages, requested_model):
     """Stream a request to a provider with failover error reporting."""
-    url = f"{provider['api_base']}/chat/completions"
+    # Fix: strip trailing slash + add provider-specific headers
+    api_base = provider["api_base"].rstrip("/")
+    url = f"{api_base}/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key and api_key != "ollama":
         headers["Authorization"] = f"Bearer {api_key}"
+    if "openrouter.ai" in api_base:
+        headers.setdefault("HTTP-Referer", "https://routerai.local")
+        headers.setdefault("X-Title", "RouterAI")
 
     payload = {k: v for k, v in body.items() if k not in ("stream",)}
     payload["model"] = model["id"]
@@ -1478,7 +1504,7 @@ async def api_test_provider(provider_id: str):
 
     api_key = manager.get_api_key(provider_id)
     if not api_key:
-        return JSONResponse(status_code=400, content={"error": "ไม่พบ API Key"})
+        return JSONResponse(status_code=400, content={"error": "ไม่พบ API Key — กด 'บันทึก API Key' ก่อน"})
 
     model = provider["models"][0]
     try:
@@ -1491,14 +1517,37 @@ async def api_test_provider(provider_id: str):
         )
         latency = int((time.time() - start) * 1000)
 
-        if "error" in result:
-            return {"success": False, "error": result["error"], "latency_ms": latency}
-
+        # Fix: _make_request now raises on error body, but handle edge cases
         content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            # Response parsed but no content — might be a non-standard format
+            return {"success": False, "error": f"ไม่ได้รับคำตอบ — response format: {str(result)[:200]}", "latency_ms": latency}
+
+        manager.report_success(provider_id)
         return {"success": True, "response": content, "latency_ms": latency, "model": model["id"]}
 
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code if e.response else 0
+        error_body = ""
+        try:
+            error_body = e.response.text[:300] if e.response else ""
+        except Exception:
+            pass
+        log.warning(f"Test {provider_id}: HTTP {status} — {error_body}")
+        manager.report_error(provider_id, str(e))
+        if status == 401:
+            return {"success": False, "error": f"API Key ไม่ถูกต้อง หรือหมดอายุ (HTTP 401) — ตรวจสอบ key ในหน้า 'จัดการ API Key'"}
+        elif status == 429:
+            return {"success": False, "error": f"Rate limit หมดแล้ว (HTTP 429) — ลองใหม่ภายหลัง"}
+        elif status == 404:
+            return {"success": False, "error": f"Endpoint ไม่พบ (HTTP 404) — URL: {provider.get('api_base', '?')}/chat/completions — อาจต้องอัพเดต provider config"}
+        else:
+            return {"success": False, "error": f"HTTP {status}: {error_body or str(e)}"}
+
     except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+        log.error(f"Test {provider_id} error: {e}")
+        manager.report_error(provider_id, str(e))
+        return {"success": False, "error": str(e)[:300]}
 
 
 @app.post("/api/models/compare")
