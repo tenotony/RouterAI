@@ -302,5 +302,91 @@
     "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
     "desc": "10K Neurons/วัน ฟรี (ต้องใส่ account_id ใน URL)",
     "flag": "☁️"
+  },
+  "reka": {
+    "name": "🔮 Reka AI",
+    "api_base": "https://api.reka.ai/v1",
+    "api_key_env": "REKA_API_KEY",
+    "models": [
+      {"id": "reka-flash", "context": 128000, "free": true, "priority": 78, "desc": "Reka Flash $10/เดือน auto-refresh"},
+      {"id": "reka-core", "context": 128000, "free": true, "priority": 75, "desc": "Reka Core ฟรี"}
+    ],
+    "rate_limit": {"rpm": 10, "tpm": 50000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://platform.reka.ai/",
+    "desc": "$10/เดือน auto-refresh ฟรี",
+    "flag": "🔮"
+  },
+  "dashscope": {
+    "name": "🐉 Alibaba DashScope (Qwen)",
+    "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key_env": "DASHSCOPE_API_KEY",
+    "models": [
+      {"id": "qwen-max", "context": 32768, "free": true, "priority": 82, "desc": "Qwen-Max 1M tokens × 90 วัน"},
+      {"id": "qwen-plus", "context": 131072, "free": true, "priority": 80, "desc": "Qwen-Plus ฟรี"},
+      {"id": "qwen-turbo", "context": 131072, "free": true, "priority": 78, "desc": "Qwen-Turbo ฟรี"},
+      {"id": "qwen-coder-turbo", "context": 131072, "free": true, "priority": 81, "desc": "Qwen Coder ฟรี"}
+    ],
+    "rate_limit": {"rpm": 20, "tpm": 100000},
+    "speed": "⚡⚡⚡⚡",
+    "signup_url": "https://bailian.console.alibabacloud.com/",
+    "desc": "1M tok input+output × 90 วัน ฟรี",
+    "flag": "🇨🇳"
+  },
+  "glhf": {
+    "name": "🎮 glhf.chat",
+    "api_base": "https://glhf.chat/api/openai/v1",
+    "api_key_env": "GLHF_API_KEY",
+    "models": [
+      {"id": "llama-3.1-405b", "context": 131072, "free": true, "priority": 78, "desc": "Llama 405B ฟรี Beta"},
+      {"id": "qwen-2.5-72b", "context": 131072, "free": true, "priority": 76, "desc": "Qwen 72B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 10, "tpm": 50000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://glhf.chat/",
+    "desc": "ทุก HuggingFace model ฟรี Beta",
+    "flag": "🎮"
+  },
+  "hyperbolic": {
+    "name": "🔺 Hyperbolic",
+    "api_base": "https://api.hyperbolic.xyz/v1",
+    "api_key_env": "HYPERBOLIC_API_KEY",
+    "models": [
+      {"id": "meta-llama/Meta-Llama-3.1-405B-Instruct", "context": 131072, "free": true, "priority": 77, "desc": "Llama 405B $1 signup credit"},
+      {"id": "deepseek-ai/DeepSeek-R1", "context": 131072, "free": true, "priority": 79, "desc": "DeepSeek R1 ฟรี"}
+    ],
+    "rate_limit": {"rpm": 5, "tpm": 20000},
+    "speed": "⚡⚡",
+    "signup_url": "https://app.hyperbolic.ai/signup",
+    "desc": "$1 signup + promos ฟรี",
+    "flag": "🔺"
+  },
+  "huggingface": {
+    "name": "🤗 HuggingFace",
+    "api_base": "https://api-inference.huggingface.co/models",
+    "api_key_env": "HF_TOKEN",
+    "models": [
+      {"id": "meta-llama/Meta-Llama-3.1-70B-Instruct", "context": 131072, "free": true, "priority": 70, "desc": "Llama 70B ฟรี $0.10/mo"},
+      {"id": "mistralai/Mistral-7B-Instruct-v0.3", "context": 32768, "free": true, "priority": 68, "desc": "Mistral 7B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 5, "tpm": 10000},
+    "speed": "⚡⚡",
+    "signup_url": "https://huggingface.co/settings/tokens",
+    "desc": "300+ community models ฟรี $0.10/mo",
+    "flag": "🤗"
+  },
+  "fireworks": {
+    "name": "🎆 Fireworks AI",
+    "api_base": "https://api.fireworks.ai/inference/v1",
+    "api_key_env": "FIREWORKS_API_KEY",
+    "models": [
+      {"id": "accounts/fireworks/models/llama-v3p1-70b-instruct", "context": 131072, "free": true, "priority": 75, "desc": "Llama 70B optimized $1 signup"},
+      {"id": "accounts/fireworks/models/qwen2p5-72b-instruct", "context": 131072, "free": true, "priority": 73, "desc": "Qwen 72B optimized"}
+    ],
+    "rate_limit": {"rpm": 10, "tpm": 50000},
+    "speed": "⚡⚡⚡⚡",
+    "signup_url": "https://fireworks.ai/account/api-keys",
+    "desc": "50+ optimized models $1 signup credit",
+    "flag": "🎆"
   }
 }
