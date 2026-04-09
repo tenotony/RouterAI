@@ -1,0 +1,43 @@
+# ============================================
+#  🔀 RouterAI — Development Docker Compose
+#  Direct port access, no Caddy
+# ============================================
+
+services:
+  routerai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routerai-dev
+    restart: unless-stopped
+    ports:
+      - "${ROUTERAI_PORT:-8900}:8900"
+    volumes:
+      - routerai-data:/app/data
+      - ./src:/app/src:ro  # Mount source for live reload
+      - ./web:/app/web:ro
+    env_file:
+      - .env
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - PYTHONUNBUFFERED=1
+      - ROUTERAI_PORT=8900
+      - ROUTERAI_HOST=0.0.0.0
+      - LOG_LEVEL=debug
+      - ROUTERAI_LOG_FORMAT=text
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - routerai-net
+
+networks:
+  routerai-net:
+    driver: bridge
+
+volumes:
+  routerai-data:
+    name: routerai-data-dev

@@ -1,29 +1,51 @@
-# RouterAI — Caddy Reverse Proxy Config (Auto HTTPS)
-# ใช้สำหรับ deploy จริง ได้ SSL certificate อัตโนมัติ
-#
-# ติดตั้ง Caddy: https://caddyserver.com/docs/install
-# รัน: caddy run --config Caddyfile
-#
-# ถ้า RouterAI รันบน port 8900:
+# ============================================
+#  🔀 RouterAI — Caddy Reverse Proxy
+#  Auto-HTTPS with Let's Encrypt
+# ============================================
 
-# Option 1: Simple reverse proxy (Caddy manages SSL)
-your-domain.com {
-    reverse_proxy localhost:8900
-    encode gzip
+# Environment variables:
+#   DOMAIN      — your domain (default: localhost)
+#   ACME_EMAIL  — email for Let's Encrypt (optional but recommended)
+
+# ── Production (public domain with auto HTTPS) ──
+{$DOMAIN:localhost} {
+    # Reverse proxy to RouterAI backend
+    reverse_proxy routerai:8900
+
+    # Compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Rate limiting at Caddy level (optional, uncomment if needed)
+    # rate_limit {  # requires caddy-ratelimit plugin
+    #     zone dynamic_remote {
+    #         key {http.request.remote.host}
+    #         events 100
+    #         window 60s
+    #     }
+    # }
+
+    # Logging
+    log {
+        output stdout
+        format console
+        level INFO
+    }
 }
 
-# Option 2: With basic auth for dashboard
-# your-domain.com {
-#     basicauth {
-#         admin $2a$14$YOUR_BCRYPT_HASH_HERE
-#     }
-#     reverse_proxy localhost:8900
-#     encode gzip
-# }
-
-# Option 3: Local HTTPS with self-signed cert (ไม่มี public domain)
-# :443 {
-#     tls internal
-#     reverse_proxy localhost:8900
+# ── Local development (HTTP only) ──
+# Uncomment below and comment out the production block above
+# for local development without HTTPS:
+#
+# :8900 {
+#     reverse_proxy routerai:8900
 #     encode gzip
 # }

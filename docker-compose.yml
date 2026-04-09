@@ -1,17 +1,48 @@
 # ============================================
-#  🔀 RouterAI — Unified Server (Docker)
-#  docker compose up -d
+#  🔀 RouterAI — Production Docker Compose
+#  Auto-HTTPS via Caddy + network isolation
 # ============================================
 
 services:
+  # ── Caddy Reverse Proxy (Auto HTTPS) ──────
+  caddy:
+    image: caddy:2-alpine
+    container_name: routerai-caddy
+    restart: unless-stopped
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      routerai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── RouterAI App ──────────────────────────
   routerai:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: routerai
     restart: unless-stopped
-    ports:
-      - "${ROUTERAI_PORT:-8900}:8900"
+    # Do NOT expose port directly — access via Caddy only
+    # Uncomment for direct access (development):
+    # ports:
+    #   - "${ROUTERAI_PORT:-8900}:8900"
     volumes:
       - routerai-data:/app/data
     env_file:
@@ -22,10 +53,14 @@ services:
       - ROUTERAI_PORT=8900
       - ROUTERAI_HOST=0.0.0.0
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      # Set this to protect /v1/* endpoints (optional)
-      # - ROUTERAI_API_KEY=your-secret-key
-      # Restrict CORS origins (comma-separated patterns)
-      # - ROUTERAI_CORS_ORIGINS=http://localhost:*,http://127.0.0.1:*
+      # Auto-generate API key if not set (printed in logs on first start)
+      - ROUTERAI_API_KEY=${ROUTERAI_API_KEY:-}
+      # Dashboard password (optional)
+      - ROUTERAI_DASHBOARD_PASSWORD=${ROUTERAI_DASHBOARD_PASSWORD:-}
+      # CORS — restrict in production
+      - ROUTERAI_CORS_ORIGINS=${ROUTERAI_CORS_ORIGINS:-}
+      # Log format
+      - ROUTERAI_LOG_FORMAT=${ROUTERAI_LOG_FORMAT:-json}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
       interval: 30s
@@ -33,12 +68,28 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - routerai-net
+      - backend
+    # Security: drop all capabilities, add only what's needed
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    # Security: read-only root filesystem (data/ is writable via volume)
+    # read_only: true  # Enable after testing — may need tmpfs for /tmp
+    security_opt:
+      - no-new-privileges:true
 
 networks:
-  routerai-net:
+  frontend:
     driver: bridge
+  backend:
+    driver: bridge
+    internal: false  # needs internet for provider APIs
 
 volumes:
   routerai-data:
     name: routerai-data
+  caddy-data:
+    name: routerai-caddy-data
+  caddy-config:
+    name: routerai-caddy-config
