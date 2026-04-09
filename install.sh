@@ -7,7 +7,7 @@
 set -e
 
 REPO="https://github.com/tenotony/RouterAI.git"
-DIR="RouterAI"
+DEFAULT_DIR="RouterAI"
 
 # Colors
 B='\033[1m'; G='\033[0;32m'; Y='\033[0;33m'; R='\033[0;31m'; C='\033[0;36m'; N='\033[0m'
@@ -19,8 +19,36 @@ echo -e "  ${C}║${N}  รวม AI ฟรี 26 providers สำหรับ O
 echo -e "  ${C}╚══════════════════════════════════════════════╝${N}"
 echo ""
 
+# ── 0. เลือกที่ติดตั้ง ──────────────────────────
+echo -e "  ${C}[0/5]${N} เลือกที่ติดตั้ง..."
+echo ""
+echo -e "  ${B}ไดร์ที่มีพื้นที่:${N}"
+# แสดงพื้นที่ว่างของแต่ละ mount point
+df -h 2>/dev/null | grep -E '^/dev/' | awk '{printf "    %s  —  free: %s of %s\n", $6, $4, $2}' || true
+# Windows/WSL drives
+for d in /mnt/c /mnt/d /mnt/e /mnt/f; do
+    [ -d "$d" ] && echo -e "    ${C}$d${N}  (Windows drive)"
+done
+echo ""
+read -p "  📁 ใส่ path ที่จะติดตั้ง (กด Enter = โฟลเดอร์ปัจจุบัน): " INSTALL_DIR
+INSTALL_DIR="${INSTALL_DIR:-$(pwd)/$DEFAULT_DIR}"
+
+# สร้างโฟลเดอร์ถ้ายังไม่มี
+mkdir -p "$INSTALL_DIR" 2>/dev/null || {
+    echo -e "  ${R}❌ ไม่สามารถสร้างโฟลเดอร์ $INSTALL_DIR ได้${N}"
+    exit 1
+}
+
+# แปลงเป็น absolute path
+INSTALL_DIR="$(cd "$INSTALL_DIR" 2>/dev/null && pwd)" || INSTALL_DIR="$(realpath "$INSTALL_DIR" 2>/dev/null || echo "$INSTALL_DIR")"
+
+echo -e "  ${G}✅ จะติดตั้งที่: ${INSTALL_DIR}${N}"
+echo ""
+
+cd "$INSTALL_DIR"
+
 # ── 1. Docker ──────────────────────────────────
-echo -e "  ${C}[1/4]${N} ตรวจสอบ Docker..."
+echo -e "  ${C}[1/5]${N} ตรวจสอบ Docker..."
 if ! command -v docker &>/dev/null; then
     echo -e "  ${Y}⚠️  ไม่พบ Docker — กำลังติดตั้ง...${N}"
     if [ -f /etc/debian_version ]; then
@@ -46,27 +74,33 @@ fi
 echo ""
 
 # ── 2. Download ────────────────────────────────
-echo -e "  ${C}[2/4]${N} ดาวน์โหลด RouterAI..."
-if [ -d "$DIR" ]; then
-    echo -e "  ${Y}📁 พบโฟลเดอร์ $DIR — อัพเดต...${N}"
-    cd "$DIR"
-    # Backup config
+echo -e "  ${C}[2/5]${N} ดาวน์โหลด RouterAI..."
+
+# Check if already has routerai files here
+if [ -f "src/server.py" ] && [ -f "providers.json" ]; then
+    echo -e "  ${Y}📁 พบ RouterAI อยู่แล้ว — อัพเดต...${N}"
     [ -f .env ] && cp .env /tmp/routerai.env.bak
     [ -d data ] && cp -r data /tmp/routerai.data.bak 2>/dev/null || true
     git pull origin main 2>/dev/null || git fetch origin && git reset --hard origin/main
-    # Restore config
+    [ -f /tmp/routerai.env.bak ] && cp /tmp/routerai.env.bak .env
+    [ -d /tmp/routerai.data.bak ] && cp -r /tmp/routerai.data.bak data 2>/dev/null || true
+    rm -f /tmp/routerai.env.bak; rm -rf /tmp/routerai.data.bak
+elif [ -d "$DEFAULT_DIR" ] || [ -d ".git" ]; then
+    echo -e "  ${Y}📁 พบโฟลเดอร์ — อัพเดต...${N}"
+    [ -f .env ] && cp .env /tmp/routerai.env.bak
+    [ -d data ] && cp -r data /tmp/routerai.data.bak 2>/dev/null || true
+    git pull origin main 2>/dev/null || git fetch origin && git reset --hard origin/main
     [ -f /tmp/routerai.env.bak ] && cp /tmp/routerai.env.bak .env
     [ -d /tmp/routerai.data.bak ] && cp -r /tmp/routerai.data.bak data 2>/dev/null || true
     rm -f /tmp/routerai.env.bak; rm -rf /tmp/routerai.data.bak
 else
-    git clone --depth 1 "$REPO" "$DIR"
-    cd "$DIR"
+    git clone --depth 1 "$REPO" .
 fi
 echo -e "  ${G}✅ ดาวน์โหลดเสร็จ${N}"
 echo ""
 
 # ── 3. Config ──────────────────────────────────
-echo -e "  ${C}[3/4]${N} ตั้งค่า..."
+echo -e "  ${C}[3/5]${N} ตั้งค่า..."
 
 # Generate API key
 if command -v python3 &>/dev/null; then
@@ -92,10 +126,16 @@ chmod +x scripts/*.sh 2>/dev/null || true
 echo -e "  ${G}✅ ตั้งค่าเรียบร้อย${N}"
 echo ""
 
-# ── 4. Start ───────────────────────────────────
-echo -e "  ${C}[4/4]${N} เริ่มระบบ..."
+# ── 4. Build ───────────────────────────────────
+echo -e "  ${C}[4/5]${N} Build Docker image..."
 docker compose -f docker-compose.simple.yml down 2>/dev/null || true
-docker compose -f docker-compose.simple.yml up -d --build 2>&1 | tail -5
+docker compose -f docker-compose.simple.yml build --no-cache 2>&1 | tail -5
+echo -e "  ${G}✅ Build เสร็จ${N}"
+echo ""
+
+# ── 5. Start ───────────────────────────────────
+echo -e "  ${C}[5/5]${N} เริ่มระบบ..."
+docker compose -f docker-compose.simple.yml up -d 2>&1
 
 echo -e "  ${Y}⏳ รอระบบเริ่ม...${N}"
 sleep 8
@@ -124,6 +164,7 @@ echo -e "     ${C}3.${N} Dashboard → \"🤖 เชื่อม OpenClaw\" → 
 echo -e "     ${C}4.${N} วางใน ~/.openclaw/openclaw.json → openclaw restart"
 echo ""
 echo -e "  ${B}🔧 คำสั่ง:${N}"
+echo -e "     ${C}cd ${INSTALL_DIR}${N}"
 echo -e "     ${C}docker compose -f docker-compose.simple.yml logs -f${N}    ดู log"
 echo -e "     ${C}docker compose -f docker-compose.simple.yml restart${N}    รีสตาร์ท"
 echo -e "     ${C}docker compose -f docker-compose.simple.yml down${N}       หยุด"
