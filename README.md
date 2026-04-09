@@ -24,7 +24,9 @@
 | 💾 **Response Cache** | จำคำตอบเดิม ไม่ต้องเสียตังค์เรียกซ้ำ |
 | 🚦 **Rate Limiting** | จำกัด requests ต่อ client ป้องกัน abuse |
 | 📊 **Dashboard ไทย** | จัดการทุกอย่างผ่านหน้าเว็บ |
-| 🔌 **20 Providers** | Groq, MiMo, Gemini, Cerebras, DeepSeek, SambaNova, LLM7, ฯลฯ |
+| 🔌 **26 Providers** | Groq, MiMo, Gemini, Cerebras, DeepSeek, SambaNova, NVIDIA, Mistral, ฯลฯ |
+| 🤝 **Consensus Mode** | routerai/consensus — ยิง 3 model พร้อมกัน เลือก consensus |
+| ⏱️ **Dynamic Timeout** | ปรับ timeout ตาม body size + estimated tokens |
 | 📊 **Leaderboard** | ดู ranking model ที่ดีที่สุด |
 | 🔍 **Full Observability** | Request ID trace ทั้ง chain |
 | 🤖 **OpenClaw Ready** | สร้าง config เชื่อม OpenClaw 1 คลิก |
