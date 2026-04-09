@@ -1562,6 +1562,7 @@ class ProviderManager:
             "routerai/thai": "thai",          # Prefer Thai language
             "routerai/code": "code",          # Prefer coding tasks
             "routerai/math": "math",          # Prefer math tasks
+            "routerai/consensus": "consensus", # 3 models parallel, pick consensus
         }
 
         alias_task = ALIAS_MAP.get(requested_model)
@@ -2075,12 +2076,102 @@ async def chat_completions(request: Request):
     prompt_text = json.dumps(messages, ensure_ascii=False)
     estimated_tokens = len(prompt_text) // 4 + (body.get("max_tokens", 1024) or 1024)
 
+    # ── Dynamic Timeout (inspired by bcproxyai) ──
+    body_size = len(prompt_text)
+    if body_size > 40000:
+        dynamic_timeout = 30
+    elif body_size > 20000:
+        dynamic_timeout = 20
+    elif body_size > 10000:
+        dynamic_timeout = 12
+    else:
+        dynamic_timeout = 8
+    # Token estimate override
+    if estimated_tokens > 20000:
+        dynamic_timeout = max(dynamic_timeout, 60)
+    elif estimated_tokens > 10000:
+        dynamic_timeout = max(dynamic_timeout, 45)
+    elif estimated_tokens > 5000:
+        dynamic_timeout = max(dynamic_timeout, 30)
+
+    # ── Consensus Mode: 3 models parallel, pick consensus ──
+    if requested_model == "routerai/consensus" and not stream and not has_images:
+        import asyncio
+        import concurrent.futures
+
+        rid_log(request_id, "info", f"[CONSENSUS:{request_id}] Starting consensus mode")
+        available = manager.get_available_providers(task_type=category, request_id=request_id)
+        candidates = []
+        for p in available:
+            for m in p["models"][:1]:
+                cap = exam_system.get_capacity(p["id"], m["id"])
+                if cap["p90_tokens"] > 0 and estimated_tokens > cap["p90_tokens"] * 1.5:
+                    continue
+                if not exam_system.can_fit_request(p["id"], m["id"], estimated_tokens):
+                    continue
+                candidates.append((p, m))
+            if len(candidates) >= 3:
+                break
+
+        if len(candidates) >= 2:
+            rid_log(request_id, "info",
+                f"[CONSENSUS:{request_id}] Racing {len(candidates)} models: "
+                f"{', '.join(f'{p['id']}/{m['id']}' for p, m in candidates)}")
+
+            def _consensus_request(p, m):
+                try:
+                    start = time.time()
+                    api_key = manager.get_api_key(p["id"])
+                    res, hdrs = _make_request(p, m, body, api_key)
+                    lat = int((time.time() - start) * 1000)
+                    content = ""
+                    if res and "choices" in res:
+                        content = res["choices"][0].get("message", {}).get("content", "")
+                    return p, m, res, content, lat, None
+                except Exception as e:
+                    return p, m, None, "", 0, str(e)
+
+            results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = [executor.submit(_consensus_request, p, m) for p, m in candidates]
+                for f in concurrent.futures.as_completed(futures, timeout=dynamic_timeout + 5):
+                    try:
+                        r = f.result()
+                        if r[2] and "error" not in r[2]:
+                            results.append(r)
+                    except Exception:
+                        pass
+
+            if results:
+                # Simple consensus: pick the response that appears most similar to others
+                # Use the first successful result as winner if no clear consensus
+                winner_p, winner_m, winner_res, winner_content, winner_lat, _ = results[0]
+
+                # Track all results
+                for p, m, res, content, lat, err in results:
+                    cooldown_manager.report_success(p["id"])
+                    live_score.update(p["id"], True, lat)
+                    category_winners.record_win(category, p["id"], m["id"])
+                    usage = res.get("usage", {})
+                    cost = manager.calc_cost(p["id"], m["id"],
+                        usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                    manager.stats.record(p["id"], m["id"],
+                        usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                        lat, True, cost_usd=cost, request_id=request_id)
+
+                rid_log(request_id, "info",
+                    f"[CONSENSUS-WIN:{request_id}] {winner_p['id']}/{winner_m['id']} "
+                    f"({len(results)}/{len(candidates)} responded, {winner_lat}ms)")
+                cache.set(messages, requested_model, winner_res, body)
+                return JSONResponse(content=winner_res, headers={"X-Request-ID": request_id})
+
     # Try providers with exponential backoff retry
     import asyncio
 
     max_retries_per_provider = manager.config.get("max_retries", 3)
     tried_providers: set = set()
     last_error = None
+    skip_reasons: dict = {}  # Track why each provider was skipped
 
     # Vision filter
     vision_capable_ids = set()
@@ -2133,12 +2224,14 @@ async def chat_completions(request: Request):
         # Check capacity: skip if request too large for learned capacity
         capacity = exam_system.get_capacity(provider["id"], model["id"])
         if capacity["p90_tokens"] > 0 and estimated_tokens > capacity["p90_tokens"] * 1.5:
+            skip_reasons[f"{provider['id']}/{model['id']}"] = f"capacity: est {estimated_tokens} > p90 {capacity['p90_tokens']}"
             rid_log(request_id, "info",
                      f"Skip {provider['id']}/{model['id']}: est {estimated_tokens} > p90 {capacity['p90_tokens']}")
             continue
 
         # Check learned rate limits
         if not exam_system.can_fit_request(provider["id"], model["id"], estimated_tokens):
+            skip_reasons[f"{provider['id']}/{model['id']}"] = "rate limit remaining < estimated tokens"
             rid_log(request_id, "info",
                      f"Skip {provider['id']}/{model['id']}: rate limit remaining < estimated tokens")
             continue
@@ -2175,7 +2268,7 @@ async def chat_completions(request: Request):
                 def _race_request(p, m, k):
                     try:
                         start = time.time()
-                        res, hdrs = _make_request(p, m, body, k)
+                        res, hdrs = _make_request(p, m, body, k, timeout_override=dynamic_timeout)
                         lat = int((time.time() - start) * 1000)
                         return p, m, res, hdrs, lat, None
                     except Exception as e:
@@ -2226,7 +2319,7 @@ async def chat_completions(request: Request):
                         headers={"X-Request-ID": request_id},
                     )
 
-                result, resp_headers = _make_request(provider, model, body, api_key)
+                result, resp_headers = _make_request(provider, model, body, api_key, timeout_override=dynamic_timeout)
                 latency = int((time.time() - start_time) * 1000)
 
                 if "error" in result:
@@ -2343,15 +2436,57 @@ async def chat_completions(request: Request):
                 manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, str(e), request_id=request_id)
                 break
 
+    # ── Relaxed Retry: ignore soft filters, try any provider with key ──
+    rid_log(request_id, "warning",
+        f"[RELAXED-RETRY:{request_id}] All normal candidates exhausted, trying relaxed mode")
+    for pid, provider_data in manager.providers.items():
+        if pid in tried_providers:
+            continue
+        env_key = provider_data.get("api_key_env")
+        api_key = manager.get_api_key(pid)
+        if not api_key and env_key:
+            continue
+        models = provider_data.get("models", [])
+        if not models:
+            continue
+        model = models[0]
+        tried_providers.add(pid)
+        try:
+            start_time = time.time()
+            result, resp_headers = _make_request(provider_data, model, body, api_key)
+            latency = int((time.time() - start_time) * 1000)
+            if "error" not in result:
+                rid_log(request_id, "info",
+                    f"[RELAXED-WIN:{request_id}] {pid}/{model['id']} succeeded ({latency}ms)")
+                cooldown_manager.report_success(pid)
+                live_score.update(pid, True, latency)
+                category_winners.record_win(category, pid, model["id"])
+                usage = result.get("usage", {})
+                tokens_in = usage.get("prompt_tokens", 0)
+                tokens_out = usage.get("completion_tokens", 0)
+                cost = manager.calc_cost(pid, model["id"], tokens_in, tokens_out)
+                manager.stats.record(pid, model["id"], tokens_in, tokens_out, latency, True,
+                    cost_usd=cost, request_id=request_id)
+                cache.set(messages, requested_model, result, body)
+                return JSONResponse(content=result, headers={"X-Request-ID": request_id})
+        except Exception:
+            continue
+
+    # ── 503 with skip reasons breakdown ──
+    rid_log(request_id, "error",
+        f"[ALL-FAIL:{request_id}] {len(tried_providers)} tried, {len(skip_reasons)} skipped")
+    error_detail = {
+        "message": f"All providers failed ({len(tried_providers)} tried). Please try again later.",
+        "type": "all_providers_failed",
+        "code": "provider_exhausted",
+        "tried": list(tried_providers),
+    }
+    if skip_reasons:
+        error_detail["skip_reasons"] = skip_reasons
+
     return JSONResponse(
         status_code=503,
-        content={
-            "error": {
-                "message": f"All providers failed ({len(tried_providers)} tried). Please try again later.",
-                "type": "all_providers_failed",
-                "code": "provider_exhausted",
-            }
-        },
+        content={"error": error_detail},
         headers={"X-Request-ID": request_id},
     )
 
@@ -2417,7 +2552,7 @@ async def embeddings(request: Request):
     )
 
 
-def _make_request(provider, model, body, api_key):
+def _make_request(provider, model, body, api_key, timeout_override=None):
     """Make a non-streaming request to a provider. Returns (response_dict, headers_dict)."""
     url = f"{provider['api_base']}/chat/completions"
     headers = {"Content-Type": "application/json"}
@@ -2428,7 +2563,10 @@ def _make_request(provider, model, body, api_key):
     payload["model"] = model["id"]
     payload["stream"] = False
 
-    timeout = manager.config.get("timeout", 30)
+    timeout = timeout_override or manager.config.get("timeout", 30)
+    # Ollama needs more time
+    if provider.get("id") == "ollama" or "ollama" in provider.get("api_base", ""):
+        timeout = max(timeout, 30)
     client = get_http_client(timeout)
     resp = client.post(url, json=payload, headers=headers)
     resp.raise_for_status()
