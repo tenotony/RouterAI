@@ -1,0 +1,45 @@
+# ============================================
+#  🔀 RouterAI — Simple Docker Compose
+#  1 container, 1 port (8900), ไม่ต้อง Caddy
+#  เหมาะสำหรับ: local / VPS / self-hosted
+# ============================================
+
+services:
+  routerai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routerai
+    restart: unless-stopped
+    ports:
+      - "${ROUTERAI_PORT:-8900}:8900"
+    volumes:
+      - routerai-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - PYTHONUNBUFFERED=1
+      - ROUTERAI_PORT=8900
+      - ROUTERAI_HOST=0.0.0.0
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ROUTERAI_API_KEY=${ROUTERAI_API_KEY:-}
+      - ROUTERAI_DASHBOARD_PASSWORD=${ROUTERAI_DASHBOARD_PASSWORD:-}
+      - ROUTERAI_CORS_ORIGINS=${ROUTERAI_CORS_ORIGINS:-}
+      - ROUTERAI_LOG_FORMAT=${ROUTERAI_LOG_FORMAT:-json}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  routerai-data:
+    name: routerai-data
