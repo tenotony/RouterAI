@@ -181,5 +181,126 @@
     "signup_url": "https://ollama.com",
     "desc": "รันบนเครื่องตัวเอง ฟรี 100%",
     "flag": "🏠"
+  },
+  "sambanova": {
+    "name": "🟤 SambaNova",
+    "api_base": "https://api.sambanova.ai/v1",
+    "api_key_env": "SAMBANOVA_API_KEY",
+    "models": [
+      {"id": "Meta-Llama-3.1-8B-Instruct", "context": 131072, "free": true, "priority": 90, "desc": "Llama 8B ฟรี 30 RPM"},
+      {"id": "Meta-Llama-3.1-70B-Instruct", "context": 131072, "free": true, "priority": 88, "desc": "Llama 70B ฟรี"},
+      {"id": "Meta-Llama-3.3-70B-Instruct", "context": 131072, "free": true, "priority": 92, "desc": "Llama 3.3 70B ฟรี"},
+      {"id": "Qwen2.5-72B-Instruct", "context": 131072, "free": true, "priority": 87, "desc": "Qwen 72B ฟรี"},
+      {"id": "Qwen2.5-Coder-32B-Instruct", "context": 131072, "free": true, "priority": 85, "desc": "Qwen Coder 32B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 30, "tpm": 100000},
+    "speed": "⚡⚡⚡⚡⚡",
+    "signup_url": "https://cloud.sambanova.ai",
+    "desc": "30 RPM × 12 models ฟรี เร็วมาก",
+    "flag": "🇺🇸"
+  },
+  "llm7": {
+    "name": "🆓 LLM7.io",
+    "api_base": "https://api.llm7.io/v1",
+    "api_key_env": "LLM7_API_KEY",
+    "models": [
+      {"id": "deepseek-r1", "context": 131072, "free": true, "priority": 85, "desc": "DeepSeek R1 ฟรี"},
+      {"id": "qwen3-coder", "context": 131072, "free": true, "priority": 83, "desc": "Qwen Coder ฟรี"},
+      {"id": "llama-3.1-70b", "context": 131072, "free": true, "priority": 80, "desc": "Llama 70B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 30, "tpm": 100000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://token.llm7.io/",
+    "desc": "30 RPM ฟรี DeepSeek R1 + 27+ models",
+    "flag": "🌍"
+  },
+  "scaleway": {
+    "name": "🇪🇺 Scaleway",
+    "api_base": "https://api.scaleway.ai/v1",
+    "api_key_env": "SCALEWAY_API_KEY",
+    "models": [
+      {"id": "qwen3-235b", "context": 131072, "free": true, "priority": 85, "desc": "Qwen3 235B ฟรี 1M tokens"},
+      {"id": "gemma-3-27b-it", "context": 131072, "free": true, "priority": 80, "desc": "Gemma 3 27B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 10, "tpm": 50000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://console.scaleway.com",
+    "desc": "1M tokens lifetime ฟรี 🇪🇺",
+    "flag": "🇪🇺"
+  },
+  "zai": {
+    "name": "🧠 Z.AI (GLM)",
+    "api_base": "https://api.z.ai/v1",
+    "api_key_env": "ZAI_API_KEY",
+    "models": [
+      {"id": "glm-4-flash", "context": 1048576, "free": true, "priority": 82, "desc": "GLM-4 Flash 1M context ฟรี"},
+      {"id": "glm-4-9b-chat", "context": 131072, "free": true, "priority": 78, "desc": "GLM-4 9B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 20, "tpm": 100000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://z.ai/manage-apikey/apikey-list",
+    "desc": "GLM models ฟรี 1M context",
+    "flag": "🇨🇳"
+  },
+  "github": {
+    "name": "🐙 GitHub Models",
+    "api_base": "https://models.inference.ai.azure.com/v1",
+    "api_key_env": "GITHUB_MODELS_TOKEN",
+    "models": [
+      {"id": "gpt-4o", "context": 128000, "free": true, "priority": 85, "desc": "GPT-4o ฟรี 50-150 RPD", "vision": true},
+      {"id": "Meta-Llama-3.1-405B-Instruct", "context": 131072, "free": true, "priority": 88, "desc": "Llama 405B ฟรี"},
+      {"id": "Mistral-large-2407", "context": 128000, "free": true, "priority": 82, "desc": "Mistral Large ฟรี"},
+      {"id": "Cohere-command-r", "context": 128000, "free": true, "priority": 78, "desc": "Command R ฟรี"}
+    ],
+    "rate_limit": {"rpm": 10, "tpm": 50000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://github.com/settings/tokens",
+    "desc": "GPT-4o + Llama 405B ฟรี 50-150 RPD",
+    "flag": "🐙"
+  },
+  "cohere": {
+    "name": "💎 Cohere",
+    "api_base": "https://api.cohere.ai/compatibility/v1",
+    "api_key_env": "COHERE_API_KEY",
+    "models": [
+      {"id": "command-r-plus", "context": 128000, "free": true, "priority": 80, "desc": "Command R+ ฟรี 1K/เดือน"},
+      {"id": "command-r", "context": 128000, "free": true, "priority": 78, "desc": "Command R ฟรี"}
+    ],
+    "rate_limit": {"rpm": 20, "tpm": 100000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://dashboard.cohere.com/api-keys",
+    "desc": "1,000 requests/เดือน ฟรี",
+    "flag": "🇨🇦"
+  },
+  "pollinations": {
+    "name": "🌸 Pollinations AI",
+    "api_base": "https://text.pollinations.ai/openai/v1",
+    "api_key_env": "POLLINATIONS_API_KEY",
+    "models": [
+      {"id": "openai", "context": 128000, "free": true, "priority": 75, "desc": "GPT ฟรี ผ่าน Pollinations"},
+      {"id": "claude", "context": 200000, "free": true, "priority": 73, "desc": "Claude ฟรี ผ่าน Pollinations"},
+      {"id": "gemini", "context": 1048576, "free": true, "priority": 72, "desc": "Gemini ฟรี ผ่าน Pollinations"},
+      {"id": "deepseek", "context": 65536, "free": true, "priority": 74, "desc": "DeepSeek ฟรี ผ่าน Pollinations"}
+    ],
+    "rate_limit": {"rpm": 1, "tpm": 10000},
+    "speed": "⚡⚡",
+    "signup_url": "https://enter.pollinations.ai/",
+    "desc": "1 req/hour ฟรี แต่รวม GPT-5, Claude, Gemini",
+    "flag": "🌸"
+  },
+  "cloudflare": {
+    "name": "☁️ Cloudflare Workers AI",
+    "api_base": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+    "api_key_env": "CLOUDFLARE_API_TOKEN",
+    "models": [
+      {"id": "@cf/meta/llama-3.1-8b-instruct", "context": 131072, "free": true, "priority": 75, "desc": "Llama 8B ฟรี 10K Neurons/วัน"},
+      {"id": "@cf/qwen/qwen1.5-14b-chat-awq", "context": 32768, "free": true, "priority": 73, "desc": "Qwen 14B ฟรี"},
+      {"id": "@cf/google/gemma-7b-it", "context": 8192, "free": true, "priority": 70, "desc": "Gemma 7B ฟรี"}
+    ],
+    "rate_limit": {"rpm": 50, "tpm": 100000},
+    "speed": "⚡⚡⚡",
+    "signup_url": "https://dash.cloudflare.com/profile/api-tokens",
+    "desc": "10K Neurons/วัน ฟรี (ต้องใส่ account_id ใน URL)",
+    "flag": "☁️"
   }
 }

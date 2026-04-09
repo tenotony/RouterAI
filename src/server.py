@@ -795,6 +795,180 @@ exam_system = ExamSystem(str(STATS_DB))
 
 
 # ══════════════════════════════════════════════════════
+#  CATEGORY WINNERS — learns which model excels at what
+# ══════════════════════════════════════════════════════
+CATEGORIES = [
+    "thai", "code", "math", "tools", "vision", "long-context",
+    "medium-context", "knowledge", "translate", "classification", "general",
+]
+
+
+class CategoryWinners:
+    """Track wins/losses per category per model. Boost winners in routing."""
+
+    def __init__(self, db_path: str):
+        self._db_path = db_path
+        self._lock = threading.Lock()
+        self._init_db()
+
+    def _get_conn(self):
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self):
+        with self._lock:
+            conn = self._get_conn()
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS category_winners (
+                    category TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    wins INTEGER DEFAULT 0,
+                    losses INTEGER DEFAULT 0,
+                    updated_at TEXT,
+                    PRIMARY KEY (category, provider, model)
+                );
+            """)
+            conn.commit()
+            conn.close()
+
+    def record_win(self, category: str, provider_id: str, model_id: str):
+        with self._lock:
+            conn = self._get_conn()
+            now = datetime.now().isoformat()
+            conn.execute(
+                "INSERT INTO category_winners (category, provider, model, wins, losses, updated_at) "
+                "VALUES (?, ?, ?, 1, 0, ?) "
+                "ON CONFLICT(category, provider, model) DO UPDATE SET "
+                "wins = wins + 1, updated_at = excluded.updated_at",
+                (category, provider_id, model_id, now),
+            )
+            conn.commit()
+            conn.close()
+
+    def record_loss(self, category: str, provider_id: str, model_id: str):
+        with self._lock:
+            conn = self._get_conn()
+            now = datetime.now().isoformat()
+            conn.execute(
+                "INSERT INTO category_winners (category, provider, model, wins, losses, updated_at) "
+                "VALUES (?, ?, ?, 0, 1, ?) "
+                "ON CONFLICT(category, provider, model) DO UPDATE SET "
+                "losses = losses + 1, updated_at = excluded.updated_at",
+                (category, provider_id, model_id, now),
+            )
+            conn.commit()
+            conn.close()
+
+    def get_winners(self, category: str, limit: int = 5) -> list:
+        """Get top winners for a category."""
+        with self._lock:
+            conn = self._get_conn()
+            cur = conn.execute(
+                "SELECT provider, model, wins, losses FROM category_winners "
+                "WHERE category = ? AND wins > 0 ORDER BY wins DESC, losses ASC LIMIT ?",
+                (category, limit),
+            )
+            results = []
+            for row in cur.fetchall():
+                total = row[2] + row[3]
+                win_rate = round(row[2] / total * 100, 1) if total > 0 else 0
+                results.append({
+                    "provider": row[0], "model": row[1],
+                    "wins": row[2], "losses": row[3],
+                    "win_rate": win_rate, "total": total,
+                })
+            conn.close()
+        return results
+
+    def get_all_winners(self) -> dict:
+        """Get winners for all categories."""
+        with self._lock:
+            conn = self._get_conn()
+            cur = conn.execute(
+                "SELECT category, provider, model, wins, losses FROM category_winners "
+                "WHERE wins > 0 ORDER BY category, wins DESC"
+            )
+            result = defaultdict(list)
+            for row in cur.fetchall():
+                total = row[3] + row[4]
+                win_rate = round(row[3] / total * 100, 1) if total > 0 else 0
+                result[row[0]].append({
+                    "provider": row[1], "model": row[2],
+                    "wins": row[3], "losses": row[4],
+                    "win_rate": win_rate,
+                })
+            conn.close()
+        return dict(result)
+
+
+category_winners = CategoryWinners(str(STATS_DB))
+
+
+# ══════════════════════════════════════════════════════
+#  LIVE SCORE EMA — real-time success rate per provider
+# ══════════════════════════════════════════════════════
+class LiveScoreEMA:
+    """
+    Exponential Moving Average of success rate per provider.
+    Updated every request — α=0.25 (new data has 25% weight).
+    """
+
+    EMA_ALPHA = 0.25
+
+    def __init__(self):
+        self._scores: dict = {}  # provider_id -> ema_score (0-100)
+        self._latencies: dict = {}  # provider_id -> ema_latency_ms
+        self._lock = threading.Lock()
+
+    def update(self, provider_id: str, success: bool, latency_ms: int = 0):
+        with self._lock:
+            score = 100.0 if success else 0.0
+            if provider_id in self._scores:
+                old = self._scores[provider_id]
+                self._scores[provider_id] = old + self.EMA_ALPHA * (score - old)
+            else:
+                self._scores[provider_id] = score
+
+            if latency_ms > 0:
+                if provider_id in self._latencies:
+                    old_lat = self._latencies[provider_id]
+                    self._latencies[provider_id] = old_lat + self.EMA_ALPHA * (latency_ms - old_lat)
+                else:
+                    self._latencies[provider_id] = float(latency_ms)
+
+    def get_score(self, provider_id: str) -> float:
+        return self._scores.get(provider_id, 50.0)  # Default 50 for unknown
+
+    def get_latency(self, provider_id: str) -> float:
+        return self._latencies.get(provider_id, 9999.0)
+
+    def get_ranking_score(self, provider_id: str, priority: int = 0) -> float:
+        """
+        Combined ranking: live_success × 100k + priority × 1k − latency
+        (inspired by bcproxyai's ranking formula)
+        """
+        success = self.get_score(provider_id)
+        latency = self.get_latency(provider_id)
+        return success * 100000 + priority * 1000 - latency
+
+    def get_all(self) -> dict:
+        with self._lock:
+            return {
+                pid: {
+                    "score": round(self._scores.get(pid, 50.0), 1),
+                    "latency_ms": round(self._latencies.get(pid, 9999.0)),
+                    "ranking": round(self.get_ranking_score(pid), 0),
+                }
+                for pid in set(list(self._scores.keys()) + list(self._latencies.keys()))
+            }
+
+
+live_score = LiveScoreEMA()
+
+
+# ══════════════════════════════════════════════════════
 #  SQLite Stats
 # ══════════════════════════════════════════════════════
 class StatsDB:
@@ -1189,51 +1363,85 @@ cooldown_manager = CooldownManager()
 #  CATEGORY DETECTION — inspired by bcproxyai
 # ══════════════════════════════════════════════════════
 CATEGORY_KEYWORDS = {
-    "coding": [
+    "code": [
         "code", "coding", "function", "class", "def ", "import ", "programming",
         "bug", "debug", "refactor", "implement", "algorithm", "script",
         "python", "javascript", "typescript", "rust", "golang", "html", "css",
         "เขียนโค้ด", "โปรแกรม", "debug", "compile", "error", "syntax",
+        "react", "node", "api", "endpoint", "database", "sql", "git",
+        "regex", "lambda", "async", "await", "docker", "kubernetes",
+    ],
+    "math": [
+        "math", "calculate", "equation", "formula", "integral", "derivative",
+        "คำนวณ", "สูตร", "สมการ", "คณิต", "probability", "statistics",
+        "algebra", "geometry", "calculus", "number theory", "theorem",
+    ],
+    "tools": [
+        "function call", "tool", "use tool", "call function", "api call",
+        "get_weather", "search", "lookup", "fetch", "tool_call",
+        "เรียกใช้", "เครื่องมือ",
+    ],
+    "thai": [
+        "ภาษาไทย", "แปลไทย", "ตอบเป็นภาษาไทย", "ไทย",
+        "เมืองหลวง", "กรุงเทพ", "ประเทศไทย",
+    ],
+    "translate": [
+        "translate", "translation", "แปล", "แปลภาษา", "interpret",
+        "แปลอังกฤษ", "แปลไทย", "แปลจีน", "แปลญี่ปุ่น",
+        "english to", "thai to", "chinese to", "japanese to",
+    ],
+    "knowledge": [
+        "explain", "what is", "who is", "how does", "why",
+        "definition", "history", "concept", "overview", "compare",
+        "difference between", "pros and cons", "advantages",
+        "อธิบาย", "คืออะไร", "ทำไม", "อย่างไร",
+    ],
+    "classification": [
+        "classify", "category", "sentiment", "label", "categorize",
+        "positive", "negative", "neutral", "spam", "not spam",
+        "จำแนก", "ประเภท", "ความรู้สึก",
     ],
     "creative": [
         "write a story", "creative", "poem", "fiction", "narrative",
         "essay", "blog post", "marketing", "copywriting", "compose",
         "เขียนเรื่อง", "กลอน", "แต่งกลอน", "บทความ", "นิยาย",
     ],
-    "thai": [
-        "ภาษาไทย", "แปลไทย", "ไทย", "เมืองหลวง", "กรุงเทพ",
-        "ภาษาไทย", "ตอบเป็นภาษาไทย",
-    ],
-    "math": [
-        "math", "calculate", "equation", "formula", "integral", "derivative",
-        "คำนวณ", "สูตร", "สมการ", "คณิต",
-    ],
     "vision": [],  # detected by image content, not text
 }
 
 
 def detect_category(messages: list) -> str:
-    """Detect task category from message content for smart routing."""
+    """Detect task category from message content for smart routing (11 categories)."""
     if not messages:
         return "general"
 
     last_msg = ""
-    for msg in reversed(messages):
+    total_length = 0
+    for msg in messages:
         content = msg.get("content", "")
         if isinstance(content, str):
             last_msg = content.lower()
-            break
+            total_length += len(content)
         elif isinstance(content, list):
             for part in content:
                 if isinstance(part, dict):
                     if part.get("type") == "text":
                         last_msg = part.get("text", "").lower()
-                        break
+                        total_length += len(last_msg)
                     elif part.get("type") == "image_url":
                         return "vision"
 
     if not last_msg:
         return "general"
+
+    # Check context length categories (inspired by bcproxyai)
+    total_chars = total_length
+    if total_chars > 40000:
+        context_cat = "long-context"
+    elif total_chars > 10000:
+        context_cat = "medium-context"
+    else:
+        context_cat = None
 
     # Score each category
     scores = {}
@@ -1245,7 +1453,15 @@ def detect_category(messages: list) -> str:
             scores[category] = score
 
     if scores:
-        return max(scores, key=scores.get)
+        best = max(scores, key=scores.get)
+        # If context is long and no strong category match, prefer context category
+        if context_cat and scores[best] <= 1:
+            return context_cat
+        return best
+
+    # No keyword match — use context length if applicable
+    if context_cat:
+        return context_cat
     return "general"
 
 
@@ -1265,11 +1481,18 @@ class ProviderManager:
                 val = os.environ.get(env_key)
                 if val:
                     self.api_keys[env_key] = val
+        # Load provider toggle settings
+        self._provider_settings = load_json_file(DATA_DIR / "provider_settings.json", {})
 
     def get_available_providers(self, model_filter=None, vision_only=False, task_type=None, request_id=None):
         self._reload_keys_from_env()
         available = []
         for pid, provider in self.providers.items():
+            # Check provider toggle setting
+            provider_setting = self._provider_settings.get(pid, {})
+            if not provider_setting.get("enabled", True):
+                continue
+
             env_key = provider.get("api_key_env")
             if env_key and not self.api_keys.get(env_key):
                 if not os.environ.get(env_key):
@@ -1331,7 +1554,24 @@ class ProviderManager:
         return self.api_keys.get(env_key) or os.environ.get(env_key)
 
     def resolve_model(self, requested_model, task_type=None, request_id=None):
-        if "/" in requested_model:
+        # ── Smart Model Aliases (inspired by bcproxyai) ──
+        ALIAS_MAP = {
+            "routerai/auto": None,           # Smart routing (default)
+            "routerai/fast": "fast",          # Prefer low-latency
+            "routerai/tools": "tools",        # Prefer tool-calling capable
+            "routerai/thai": "thai",          # Prefer Thai language
+            "routerai/code": "code",          # Prefer coding tasks
+            "routerai/math": "math",          # Prefer math tasks
+        }
+
+        alias_task = ALIAS_MAP.get(requested_model)
+        if alias_task is not None:
+            task_type = alias_task
+            requested_model = "routerai/auto"
+        elif requested_model == "routerai/auto":
+            task_type = task_type or "general"
+
+        if "/" in requested_model and not requested_model.startswith("routerai/"):
             provider_hint, model_id = requested_model.split("/", 1)
         else:
             provider_hint = None
@@ -1339,6 +1579,7 @@ class ProviderManager:
 
         available = self.get_available_providers(task_type=task_type, request_id=request_id)
 
+        # Direct provider/model match
         if provider_hint:
             for p in available:
                 if p["id"] == provider_hint:
@@ -1348,23 +1589,37 @@ class ProviderManager:
                     if p["models"]:
                         return p, p["models"][0]
 
+        # Exact model ID match
         for p in available:
             for m in p["models"]:
                 if model_id == m["id"] or m["id"].endswith(model_id):
                     return p, m
 
+        # ── Smart Ranking (inspired by bcproxyai) ──
+        # 1. Category winners boost
+        # 2. Live Score EMA ranking
+        # 3. Latency as tiebreaker
         if available:
-            latency_stats = self.stats.get_latency_stats(days=1)
-            provider_latencies = {
-                ps["provider"]: ps["avg_ms"]
-                for ps in latency_stats.get("providers", {}).values()
-                if ps["count"] >= 3
-            }
-            def _sort_key(p):
+            # Get category winners for boost
+            cat = task_type or "general"
+            winners = category_winners.get_winners(cat, limit=5)
+            winner_ids = {(w["provider"], w["model"]) for w in winners}
+
+            def _smart_sort(p):
                 top_priority = max((m.get("priority", 0) for m in p["models"]), default=0)
-                latency = provider_latencies.get(p["id"], 9999)
-                return (-top_priority, latency)
-            available.sort(key=_sort_key)
+                # Live score ranking
+                ema_score = live_score.get_score(p["id"])
+                ema_latency = live_score.get_latency(p["id"])
+                # Category winner boost: +50 to score if in top winners
+                cat_boost = 0
+                for m in p["models"]:
+                    if (p["id"], m["id"]) in winner_ids:
+                        cat_boost = 50
+                        break
+                # Combined: success_score × 100k + priority × 1k + cat_boost × 500 - latency
+                return -(ema_score * 100000 + top_priority * 1000 + cat_boost * 500 - ema_latency)
+
+            available.sort(key=_smart_sort)
             p = available[0]
             return p, p["models"][0]
         return None, None
@@ -1560,7 +1815,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RouterAI",
     description="OpenAI-compatible API proxy with auto-failover, exam system, and smart routing",
-    version="3.0.0",
+    version="3.5.0",
     lifespan=lifespan,
 )
 
@@ -1783,7 +2038,12 @@ async def chat_completions(request: Request):
     # Category detection for smart routing
     category = detect_category(messages)
     if category != "general":
-        rid_log(request_id, "info", f"Category detected: {category}")
+        rid_log(request_id, "info", f"[CATEGORY:{request_id}] detected: {category}")
+        # Log category winners
+        winners = category_winners.get_winners(category, limit=3)
+        if winners:
+            winner_str = ", ".join(f"{w['provider']}/{w['model']}({w['win_rate']}%/n={w['total']})" for w in winners)
+            rid_log(request_id, "info", f"[CATEGORY-BOOST:{request_id}] \"{category}\" → {len(winners)} winners: {winner_str}")
 
     # Check daily budget
     budget_exceeded, budget_spent, budget_limit = manager.check_budget()
@@ -1885,6 +2145,74 @@ async def chat_completions(request: Request):
 
         api_key = manager.get_api_key(provider["id"])
 
+        # ── Hedge Race: race top-2 providers in parallel (non-streaming only) ──
+        # Inspired by bcproxyai's hedge race — pick fastest response
+        if not stream and not has_images:
+            # Find second-best provider for hedging
+            hedge_provider = None
+            hedge_model = None
+            hedge_key = None
+            available_all = manager.get_available_providers(task_type=category, request_id=request_id)
+            for p in available_all:
+                if p["id"] not in tried_providers and p["id"] != provider["id"]:
+                    # Check capacity + rate limits for hedge candidate too
+                    h_cap = exam_system.get_capacity(p["id"], p["models"][0]["id"])
+                    if h_cap["p90_tokens"] > 0 and estimated_tokens > h_cap["p90_tokens"] * 1.5:
+                        continue
+                    if not exam_system.can_fit_request(p["id"], p["models"][0]["id"], estimated_tokens):
+                        continue
+                    hedge_provider = p
+                    hedge_model = p["models"][0]
+                    hedge_key = manager.get_api_key(p["id"])
+                    tried_providers.add(p["id"])
+                    break
+
+            if hedge_provider and hedge_key:
+                rid_log(request_id, "info",
+                    f"[HEDGE-RACE:{request_id}] {provider['id']}/{model['id']} vs {hedge_provider['id']}/{hedge_model['id']}")
+                import concurrent.futures
+
+                def _race_request(p, m, k):
+                    try:
+                        start = time.time()
+                        res, hdrs = _make_request(p, m, body, k)
+                        lat = int((time.time() - start) * 1000)
+                        return p, m, res, hdrs, lat, None
+                    except Exception as e:
+                        return p, m, None, None, 0, str(e)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    f1 = executor.submit(_race_request, provider, model, api_key)
+                    f2 = executor.submit(_race_request, hedge_provider, hedge_model, hedge_key)
+
+                    # Take first successful result
+                    for future in concurrent.futures.as_completed([f1, f2], timeout=manager.config.get("timeout", 30)):
+                        p, m, res, hdrs, lat, err = future.result()
+                        if res and "error" not in res:
+                            # Found a winner!
+                            loser = hedge_provider if p["id"] == provider["id"] else provider
+                            rid_log(request_id, "info",
+                                f"[HEDGE-WIN:{request_id}] {p['id']}/{m['id']} won ({lat}ms)")
+
+                            # Update stats for winner
+                            cooldown_manager.report_success(p["id"])
+                            live_score.update(p["id"], True, lat)
+                            exam_system.update_rate_limit(p["id"], m["id"], headers=hdrs)
+                            category_winners.record_win(category, p["id"], m["id"])
+                            usage = res.get("usage", {})
+                            tokens_in = usage.get("prompt_tokens", 0)
+                            tokens_out = usage.get("completion_tokens", 0)
+                            total_tokens = tokens_in + tokens_out
+                            if total_tokens > 0:
+                                exam_system.update_capacity(p["id"], m["id"], total_tokens)
+                            cost = manager.calc_cost(p["id"], m["id"], tokens_in, tokens_out)
+                            manager.stats.record(p["id"], m["id"], tokens_in, tokens_out, lat, True, cost_usd=cost, request_id=request_id)
+                            cache.set(messages, requested_model, res, body)
+                            return JSONResponse(content=res, headers={"X-Request-ID": request_id})
+
+                    # Both failed — fall through to normal retry logic
+                    rid_log(request_id, "warning", f"[HEDGE-FAIL:{request_id}] both hedge providers failed, falling to retry")
+
         for retry_idx in range(max_retries_per_provider):
             try:
                 start_time = time.time()
@@ -1908,6 +2236,28 @@ async def chat_completions(request: Request):
                 exam_system.update_rate_limit(provider["id"], model["id"], headers=resp_headers)
 
                 cooldown_manager.report_success(provider["id"])
+
+                # ── Live Score EMA update ──
+                live_score.update(provider["id"], True, latency)
+
+                # ── Category Winners tracking ──
+                category_winners.record_win(category, provider["id"], model["id"])
+
+                # ── Detailed routing log (inspired by bcproxyai) ──
+                rid_log(request_id, "info",
+                    f"[RESULT:{request_id}] {provider['id']}/{model['id']} "
+                    f"✅ {latency}ms | cat={category} | "
+                    f"ema={live_score.get_score(provider['id']):.0f}%")
+
+                # Detailed routing log
+                tried_list = sorted(tried_providers)
+                rid_log(request_id, "info",
+                    f"[ROUTING-DETAIL:{request_id}] tried={tried_list} | "
+                    f"candidates={len(available) if 'available' in dir() else '?'} | "
+                    f"winner={provider['id']}/{model['id']}")
+
+                cache.set(messages, requested_model, result, body)
+
                 usage = result.get("usage", {})
                 tokens_in = usage.get("prompt_tokens", 0)
                 tokens_out = usage.get("completion_tokens", 0)
@@ -1947,6 +2297,8 @@ async def chat_completions(request: Request):
                         continue
                     else:
                         cooldown_manager.report_error(provider["id"], f"429 after {max_retries_per_provider} retries")
+                        live_score.update(provider["id"], False, 0)
+                        category_winners.record_loss(category, provider["id"], model["id"])
                         break
 
                 elif status in (500, 502, 503, 504):
@@ -1954,15 +2306,16 @@ async def chat_completions(request: Request):
                     rid_log(request_id, "warning",
                              f"{status} from {provider['id']} (retry {retry_idx+1}/{max_retries_per_provider}), wait {delay}s")
                     cooldown_manager.report_error(provider["id"], last_error)
-                    if retry_idx < max_retries_per_provider - 1:
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
+                    if retry_idx >= max_retries_per_provider - 1:
+                        live_score.update(provider["id"], False, 0)
+                        category_winners.record_loss(category, provider["id"], model["id"])
                         manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error, request_id=request_id)
                         break
                 else:
                     rid_log(request_id, "error", f"{status} client error from {provider['id']}: {last_error}")
                     cooldown_manager.report_error(provider["id"], last_error)
+                    live_score.update(provider["id"], False, 0)
+                    category_winners.record_loss(category, provider["id"], model["id"])
                     manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error, request_id=request_id)
                     break
 
@@ -1972,17 +2325,21 @@ async def chat_completions(request: Request):
                 rid_log(request_id, "warning",
                          f"Timeout from {provider['id']} (retry {retry_idx+1}/{max_retries_per_provider}), wait {delay}s")
                 cooldown_manager.report_error(provider["id"], last_error)
-                if retry_idx < max_retries_per_provider - 1:
-                    await asyncio.sleep(delay)
-                    continue
-                else:
+                if retry_idx >= max_retries_per_provider - 1:
+                    live_score.update(provider["id"], False, 0)
+                    category_winners.record_loss(category, provider["id"], model["id"])
                     manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, last_error, request_id=request_id)
                     break
+                else:
+                    await asyncio.sleep(delay)
+                    continue
 
             except Exception as e:
                 last_error = type(e).__name__  # Don't leak error details to client
                 rid_log(request_id, "error", f"Error from {provider['id']}: {e}")
                 cooldown_manager.report_error(provider["id"], str(e))
+                live_score.update(provider["id"], False, 0)
+                category_winners.record_loss(category, provider["id"], model["id"])
                 manager.stats.record(provider["id"], model.get("id", "?"), 0, 0, 0, False, str(e), request_id=request_id)
                 break
 
@@ -2129,6 +2486,13 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
         latency = int((time.time() - start_time) * 1000)
         cooldown_manager.report_success(provider["id"])
 
+        # ── Live Score EMA update (stream) ──
+        live_score.update(provider["id"], True, latency)
+
+        # ── Category Winners tracking (stream) ──
+        # Use global category if available from the request context
+        category_winners.record_win("general", provider["id"], model["id"])
+
         if usage_from_stream:
             tokens_in = usage_from_stream.get("prompt_tokens", 0)
             tokens_out = usage_from_stream.get("completion_tokens", 0)
@@ -2149,6 +2513,8 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
         status = e.response.status_code if e.response else 0
         exam_system.update_rate_limit(provider["id"], model["id"], headers=dict(e.response.headers) if e.response else None)
         cooldown_manager.report_error(provider["id"], str(e))
+        live_score.update(provider["id"], False, 0)
+        category_winners.record_loss("general", provider["id"], model["id"])
         manager.stats.record(provider["id"], model["id"], 0, 0, 0, False, str(e), request_id=request_id)
         error_msg = "Provider error"  # Don't leak details
         error_chunk = {"error": {"message": error_msg, "type": "stream_error", "code": status}}
@@ -2156,6 +2522,8 @@ async def _stream_request(provider, model, body, api_key, messages, requested_mo
 
     except Exception as e:
         cooldown_manager.report_error(provider["id"], str(e))
+        live_score.update(provider["id"], False, 0)
+        category_winners.record_loss("general", provider["id"], model["id"])
         manager.stats.record(provider["id"], model["id"], 0, 0, 0, False, str(e), request_id=request_id)
         error_chunk = {"error": {"message": "Stream error", "type": "stream_error"}}
         yield f"data: {json.dumps(error_chunk)}\n\n"
@@ -2223,7 +2591,7 @@ async def api_status():
     summary = manager.stats.get_summary(days=7)
     return {
         "status": "running",
-        "version": "3.0.0",
+        "version": "3.5.0",
         "providers_total": len(manager.providers),
         "providers_available": len(available),
         "config": manager.config,
@@ -2576,6 +2944,150 @@ async def api_cooldowns():
     return {"cooldowns": result}
 
 
+# ══════════════════════════════════════════════════════
+#  NEW: Leaderboard, Live Score, Category Winners, Provider Toggle
+#  (inspired by bcproxyai)
+# ══════════════════════════════════════════════════════
+
+@app.get("/api/leaderboard")
+async def api_leaderboard(days: int = 7):
+    """Top performing models ranked by live score + category wins."""
+    # Get live scores
+    scores = live_score.get_all()
+
+    # Get provider stats
+    summary = manager.stats.get_summary(days=days)
+    provider_stats = {}
+    for key, val in summary.get("providers", {}).items():
+        provider_stats[key] = val
+
+    # Build leaderboard
+    leaderboard = []
+    for pid, score_data in scores.items():
+        stats = provider_stats.get(pid, {})
+        total = stats.get("total", 0)
+        successes = stats.get("successes", 0)
+        success_rate = round(successes / total * 100, 1) if total > 0 else 0
+        leaderboard.append({
+            "provider": pid,
+            "live_score": score_data["score"],
+            "live_latency_ms": score_data["latency_ms"],
+            "ranking_score": score_data["ranking"],
+            "total_requests": total,
+            "success_rate": success_rate,
+            "avg_latency_ms": round(stats.get("avg_ms", 0)),
+        })
+
+    leaderboard.sort(key=lambda x: x["ranking_score"], reverse=True)
+    return {"leaderboard": leaderboard, "period_days": days}
+
+
+@app.get("/api/live-score")
+async def api_live_score():
+    """Live EMA score snapshot for all providers."""
+    return {"scores": live_score.get_all()}
+
+
+@app.get("/api/category-winners")
+async def api_category_winners(category: str = None):
+    """Get category winners. If no category specified, returns all."""
+    if category:
+        return {"category": category, "winners": category_winners.get_winners(category)}
+    return {"categories": category_winners.get_all_winners()}
+
+
+@app.post("/api/providers/{provider_id}/toggle")
+async def api_toggle_provider(provider_id: str, request: Request):
+    """Enable/disable a provider without restart."""
+    data = await request.json() if await request.body() else {}
+    enabled = data.get("enabled", True)
+
+    # Load current provider settings
+    settings_file = DATA_DIR / "provider_settings.json"
+    settings = load_json_file(settings_file, {})
+    settings[provider_id] = {"enabled": enabled}
+    save_json_file(settings_file, settings)
+
+    # Reload to apply
+    manager.reload()
+
+    action = "เปิดใช้งาน" if enabled else "ปิดใช้งาน"
+    return {"status": "ok", "message": f"{action} Provider '{provider_id}' สำเร็จ ✅", "enabled": enabled}
+
+
+@app.get("/api/providers/{provider_id}/toggle")
+async def api_get_provider_toggle(provider_id: str):
+    """Get enable/disable status for a provider."""
+    settings_file = DATA_DIR / "provider_settings.json"
+    settings = load_json_file(settings_file, {})
+    provider_settings = settings.get(provider_id, {"enabled": True})
+    return {"provider": provider_id, "enabled": provider_settings.get("enabled", True)}
+
+
+@app.get("/api/routing-log")
+async def api_routing_log(limit: int = 50):
+    """Get recent routing decisions with request IDs."""
+    manager.stats._ensure_conn()
+    with manager.stats._lock:
+        cur = manager.stats._conn.execute(
+            "SELECT ts, request_id, provider, model, latency_ms, success, error "
+            "FROM requests ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        results = []
+        for row in cur.fetchall():
+            results.append({
+                "ts": row[0], "request_id": row[1],
+                "provider": row[2], "model": row[3],
+                "latency_ms": row[4], "success": bool(row[5]),
+                "error": row[6],
+            })
+    return {"logs": results}
+
+
+@app.get("/api/uptime")
+async def api_uptime(days: int = 7):
+    """Uptime percentage per provider."""
+    manager.stats._ensure_conn()
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    with manager.stats._lock:
+        cur = manager.stats._conn.execute(
+            "SELECT provider, COUNT(*) as total, SUM(success) as successes "
+            "FROM requests WHERE ts > ? GROUP BY provider",
+            (cutoff,),
+        )
+        results = {}
+        for row in cur.fetchall():
+            total = row[1] or 1
+            results[row[0]] = {
+                "total_requests": total,
+                "successes": row[2] or 0,
+                "uptime_pct": round((row[2] or 0) / total * 100, 2),
+            }
+    return {"uptime": results, "period_days": days}
+
+
+@app.get("/api/trend")
+async def api_trend(days: int = 7):
+    """Time-series metrics (requests per hour)."""
+    manager.stats._ensure_conn()
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    with manager.stats._lock:
+        cur = manager.stats._conn.execute(
+            "SELECT SUBSTR(ts, 1, 13) as hour, COUNT(*) as total, "
+            "SUM(success) as successes, AVG(latency_ms) as avg_latency "
+            "FROM requests WHERE ts > ? GROUP BY hour ORDER BY hour",
+            (cutoff,),
+        )
+        results = []
+        for row in cur.fetchall():
+            results.append({
+                "hour": row[0], "total": row[1],
+                "successes": row[2], "avg_latency_ms": round(row[3] or 0),
+            })
+    return {"trend": results, "period_days": days}
+
+
 # ── Test / Compare / Playground ─────────────────────
 @app.post("/api/test/{provider_id}")
 async def api_test_provider(provider_id: str):
@@ -2852,7 +3364,7 @@ async def health(deep: bool = False):
             "spent_today_usd": budget_spent,
             "exceeded": budget_exceeded,
         } if budget_limit > 0 else None,
-        "version": "3.0.0",
+        "version": "3.5.0",
     }
 
 
@@ -2866,7 +3378,7 @@ if __name__ == "__main__":
 
     print(f"""
 ╔══════════════════════════════════════════════════╗
-║  🔀 RouterAI v3.0.0 — FastAPI Server           ║
+║  🔀 RouterAI v3.5.0 — FastAPI Server           ║
 ║  🌐 Proxy + Dashboard: http://{host}:{port}      ║
 ║  📊 API Docs:     http://{host}:{port}/docs      ║
 ╚══════════════════════════════════════════════════╝

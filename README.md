@@ -13,10 +13,20 @@
 | ฟีเจอร์ | คำอธิบาย |
 |---------|-----------|
 | 🔄 **Auto-Failover** | ถ้าตัวไหนล่ม สลับไปตัวอื่นอัตโนมัติ |
+| 🏎️ **Hedge Race** | ยิง top-2 providers พร้อมกัน เลือกตัวเร็วกว่า |
+| 🏆 **Category Winners** | เรียนรู้ว่า model ไหนเก่ง code/thai/math/tools |
+| ⚡ **Live Score EMA** | อัพเดท success rate ทุก request แบบ real-time |
+| 🎛️ **Smart Aliases** | routerai/auto, /fast, /tools, /thai, /code |
+| 📊 **Exam System** | สอบ model ก่อนใช้งานจริง (8 ข้อ ผ่าน ≥ 70%) |
+| 📏 **Capacity Learning** | เรียนรู้ token capacity จริงของแต่ละ model |
+| 📈 **Rate Limit Learning** | อ่าน header + parse 429 เรียนรู้ TPM/TPD |
+| ⏳ **Exponential Cooldown** | 30s → 1m → 2 → 4 → 8 min auto-reset |
 | 💾 **Response Cache** | จำคำตอบเดิม ไม่ต้องเสียตังค์เรียกซ้ำ |
 | 🚦 **Rate Limiting** | จำกัด requests ต่อ client ป้องกัน abuse |
 | 📊 **Dashboard ไทย** | จัดการทุกอย่างผ่านหน้าเว็บ |
-| 🔌 **12 Providers** | Groq, MiMo, Gemini, Cerebras, DeepSeek, ฯลฯ |
+| 🔌 **20 Providers** | Groq, MiMo, Gemini, Cerebras, DeepSeek, SambaNova, LLM7, ฯลฯ |
+| 📊 **Leaderboard** | ดู ranking model ที่ดีที่สุด |
+| 🔍 **Full Observability** | Request ID trace ทั้ง chain |
 | 🤖 **OpenClaw Ready** | สร้าง config เชื่อม OpenClaw 1 คลิก |
 | 🔒 **Auth Support** | ตั้ง API Key ป้องกัน endpoint |
 | 🐳 **Docker** | deploy ง่าย container เดียว |
