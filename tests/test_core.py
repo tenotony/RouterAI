@@ -513,6 +513,86 @@ class TestAPIKeyManagement:
         assert keys["KEY_X"] == "sk-xxx-new"
         assert keys["KEY_Y"] == "sk-yyy"
 
+    def test_send_masked_preserves_key(self, client):
+        """Sending masked value back should NOT overwrite the real key."""
+        # Save key
+        client.post("/api/keys", json={"MY_KEY": "sk-super-secret-value"})
+        # Get masked
+        resp = client.get("/api/keys/masked")
+        masked = resp.json()["keys"]["MY_KEY"]
+        assert "..." in masked
+
+        # Send masked value back (frontend simulating untouched field)
+        client.post("/api/keys", json={"OTHER_KEY": "sk-new", "MY_KEY": masked})
+        # MY_KEY should still be original value
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert keys["MY_KEY"] == "sk-super-secret-value"
+        assert keys["OTHER_KEY"] == "sk-new"
+
+    def test_delete_does_not_affect_other_keys(self, client):
+        """Deleting one key must not touch other keys."""
+        client.post("/api/keys", json={
+            "KEY_A": "sk-aaa-1111",
+            "KEY_B": "sk-bbb-2222",
+            "KEY_C": "sk-ccc-3333"
+        })
+        # Delete KEY_B only
+        resp = client.post("/api/keys", json={"KEY_B": ""})
+        assert resp.status_code == 200
+
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert "KEY_B" not in keys
+        assert keys["KEY_A"] == "sk-aaa-1111"
+        assert keys["KEY_C"] == "sk-ccc-3333"
+
+    def test_overwrite_with_new_key(self, client):
+        """Sending a new value should overwrite existing key."""
+        client.post("/api/keys", json={"MY_KEY": "sk-old-value"})
+        client.post("/api/keys", json={"MY_KEY": "sk-brand-new-value"})
+        resp = client.get("/api/keys/plain")
+        assert resp.json()["keys"]["MY_KEY"] == "sk-brand-new-value"
+
+    def test_delete_key_then_re_add(self, client):
+        """After deleting a key, adding it again should work."""
+        client.post("/api/keys", json={"TEMP_KEY": "sk-first"})
+        client.post("/api/keys", json={"TEMP_KEY": ""})
+        resp = client.get("/api/keys/plain")
+        assert "TEMP_KEY" not in resp.json()["keys"]
+
+        client.post("/api/keys", json={"TEMP_KEY": "sk-second"})
+        resp = client.get("/api/keys/plain")
+        assert resp.json()["keys"]["TEMP_KEY"] == "sk-second"
+
+    def test_empty_body_changes_nothing(self, client):
+        """Sending empty JSON body should not modify any keys."""
+        client.post("/api/keys", json={"KEEP_ME": "sk-preserved"})
+        client.post("/api/keys", json={})
+        resp = client.get("/api/keys/plain")
+        assert resp.json()["keys"]["KEEP_ME"] == "sk-preserved"
+
+    def test_mixed_edit_preserve_delete(self, client):
+        """Simulate: edit A, preserve B, delete C in one save."""
+        client.post("/api/keys", json={
+            "KEY_A": "sk-aaa",
+            "KEY_B": "sk-bbb",
+            "KEY_C": "sk-ccc"
+        })
+        # Get masked for KEY_B (simulate frontend sending masked for untouched)
+        masked = client.get("/api/keys/masked").json()["keys"]["KEY_B"]
+        # Edit A, preserve B (masked), delete C (empty)
+        client.post("/api/keys", json={
+            "KEY_A": "sk-aaa-edited",
+            "KEY_B": masked,
+            "KEY_C": ""
+        })
+        resp = client.get("/api/keys/plain")
+        keys = resp.json()["keys"]
+        assert keys["KEY_A"] == "sk-aaa-edited"
+        assert keys["KEY_B"] == "sk-bbb"
+        assert "KEY_C" not in keys
+
 
 # ── Test: Legacy File Migration ─────────────────────
 
